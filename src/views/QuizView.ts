@@ -381,9 +381,7 @@ export class QuizView extends ItemView {
         cls: "kokushi-option-text",
       });
 
-      textEl.createEl({
-        text: `${option.id}. `,
-      });
+      textEl.createSpan().setText(`${option.id}. `);
 
       const markdownEl = textEl.createDiv();
 
