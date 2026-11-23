@@ -331,3 +331,36 @@ If your plugin does not need CSS, delete this file.
   width: 100%;
   margin-bottom: 16px;
 }
+
+/* 選択ボタンの点滅・アニメーション抑制 */
+
+.kokushi-scope-button {
+  transition: none !important;
+  animation: none !important;
+  transform: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 選択中：ホバー・クリック後も色を維持 */
+
+.kokushi-scope-button.is-selected,
+.kokushi-scope-button.is-selected:hover,
+.kokushi-scope-button.is-selected:active,
+.kokushi-scope-button.is-selected:focus {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+  transform: none;
+}
+
+/* 非選択中 */
+
+.kokushi-scope-button:not(.is-selected),
+.kokushi-scope-button:not(.is-selected):hover,
+.kokushi-scope-button:not(.is-selected):active {
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
+  border-color: var(--background-modifier-border);
+  transform: none;
+}
