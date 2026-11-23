@@ -61,10 +61,4 @@ export default class KokushiPlugin extends Plugin {
 
     await workspace.revealLeaf(leaf);
   }
-
-  onunload(): void {
-    this.app.workspace.detachLeavesOfType(
-      VIEW_TYPE_KOKUSHI
-    );
-  }
 }

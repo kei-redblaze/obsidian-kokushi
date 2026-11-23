@@ -189,7 +189,7 @@ export class QuizView extends ItemView {
 
     for (const line of lines) {
       const match = line.match(
-        /^\s*(?:[-*]\s+)?([a-z])[\.\．]\s+(.+)$/
+        /^\s*(?:[-*]\s+)?([a-z])[.．]\s+(.+)$/
       );
 
       if (match) {
@@ -381,7 +381,7 @@ export class QuizView extends ItemView {
         cls: "kokushi-option-text",
       });
 
-      textEl.createEl("span", {
+      textEl.createEl({
         text: `${option.id}. `,
       });
 
