@@ -273,3 +273,61 @@ If your plugin does not need CSS, delete this file.
   color: var(--text-muted);
   font-size: 0.85em;
 }
+
+
+/* 出題範囲選択：ボタン式UI */
+
+.kokushi-scope-group {
+  margin: 18px 0;
+}
+
+.kokushi-scope-group h4 {
+  margin: 0 0 10px;
+}
+
+.kokushi-scope-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.kokushi-scope-button {
+  padding: 9px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.kokushi-scope-button.is-selected {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-weight: 600;
+}
+
+.kokushi-scope-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.kokushi-scope-preview {
+  padding: 14px;
+  margin: 20px 0 12px;
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.kokushi-scope-preview p {
+  margin: 4px 0;
+}
+
+.kokushi-start-button {
+  width: 100%;
+  margin-bottom: 16px;
+}
