@@ -215,3 +215,61 @@ If your plugin does not need CSS, delete this file.
     font-size: 1.3em;
   }
 }
+
+/* 回次の複数選択 */
+
+.kokushi-scope-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kokushi-exam-checkboxes {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(100px, 1fr)
+  );
+  gap: 10px;
+  margin: 12px 0 20px;
+}
+
+.kokushi-exam-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.kokushi-exam-checkbox input {
+  margin: 0;
+}
+
+/* 出題問題数 */
+
+.kokushi-custom-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.kokushi-custom-count input {
+  width: 120px;
+}
+
+.kokushi-count {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin: 20px 0 12px;
+}
+
+.kokushi-count-error {
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
