@@ -73,3 +73,145 @@ If your plugin does not need CSS, delete this file.
 .kokushi-navigation {
   margin-top: 20px;
 }
+
+
+/* ========================================
+   Kokushi Dashboard
+   ======================================== */
+
+.kokushi-dashboard {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.kokushi-dashboard h2 {
+  margin-top: 0;
+}
+
+.kokushi-dashboard h3 {
+  margin-top: 28px;
+}
+
+.kokushi-dashboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.kokushi-dashboard-cards {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.kokushi-dashboard-card {
+  min-width: 0;
+  padding: 16px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+}
+
+.kokushi-dashboard-card-title {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+
+.kokushi-dashboard-card-value {
+  margin: 0;
+  font-size: 1.6em;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.kokushi-dashboard-card-detail {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.8em;
+}
+
+.kokushi-dashboard-warning {
+  color: var(--text-error);
+  padding: 8px;
+  border: 1px solid var(--text-error);
+  border-radius: 6px;
+}
+
+.kokushi-dashboard-chart-area {
+  margin: 12px 0;
+}
+
+.kokushi-dashboard-chart-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.kokushi-dashboard-chart-scroll svg {
+  display: block;
+  max-width: none;
+}
+
+.kokushi-dashboard-chart-caption {
+  color: var(--text-muted);
+  font-size: 0.8em;
+}
+
+.kokushi-dashboard-history {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.kokushi-dashboard-history th,
+.kokushi-dashboard-history td {
+  padding: 8px;
+  border-bottom:
+    1px solid var(--background-modifier-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.kokushi-dashboard-history th {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.kokushi-dashboard-link {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--text-accent);
+  padding: 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.kokushi-dashboard-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 420px) {
+  .kokushi-dashboard {
+    padding: 8px;
+  }
+
+  .kokushi-dashboard-cards {
+    gap: 8px;
+  }
+
+  .kokushi-dashboard-card {
+    padding: 12px;
+  }
+
+  .kokushi-dashboard-card-value {
+    font-size: 1.3em;
+  }
+}

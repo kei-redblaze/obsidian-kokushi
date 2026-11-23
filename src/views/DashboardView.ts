@@ -1,0 +1,674 @@
+
+import {
+  ItemView,
+  Notice,
+  WorkspaceLeaf,
+} from "obsidian";
+
+import { QuestionService } from "../services/QuestionService";
+import {
+  StatisticsService,
+  DashboardStatistics,
+  DailyStatistics,
+} from "../services/StatisticsService";
+
+export const VIEW_TYPE_DASHBOARD =
+  "kokushi-dashboard";
+
+export type DashboardTarget =
+  "unanswered" | "incorrect";
+
+export class DashboardView extends ItemView {
+  private period: "7" | "30" | "all" = "30";
+
+  constructor(
+    leaf: WorkspaceLeaf,
+    private questionService: QuestionService,
+    private statisticsService: StatisticsService,
+    private onStartQuiz: (
+      target: DashboardTarget
+    ) => Promise<void>,
+    private onOpenQuestion: (
+      id: string
+    ) => Promise<void>
+  ) {
+    super(leaf);
+  }
+
+  getViewType(): string {
+    return VIEW_TYPE_DASHBOARD;
+  }
+
+  getDisplayText(): string {
+    return "国試ダッシュボード";
+  }
+
+  getIcon(): string {
+    return "chart-no-axes-combined";
+  }
+
+  async onOpen(): Promise<void> {
+    await this.refresh();
+  }
+
+  async onClose(): Promise<void> {
+    this.contentEl.empty();
+  }
+
+  // ========================================
+  // データの再読み込み
+  // ========================================
+
+  private async refresh(): Promise<void> {
+    this.contentEl.empty();
+    this.contentEl.createEl("p", {
+      text: "学習統計を集計しています...",
+    });
+
+    try {
+      const questions =
+        await this.questionService.getQuestions();
+
+      const stats =
+        await this.statisticsService.load(
+          questions.map(question => question.id)
+        );
+
+      this.renderDashboard(stats);
+    } catch (error) {
+      console.error(
+        "[Kokushi] Dashboard error",
+        error
+      );
+
+      this.contentEl.empty();
+      this.contentEl.createEl("p", {
+        text: "ダッシュボードの読み込みに失敗しました。",
+      });
+
+      new Notice(
+        "学習統計を取得できませんでした"
+      );
+    }
+  }
+
+  private formatRate(
+    value: number | null
+  ): string {
+    return value === null
+      ? "—"
+      : `${value.toFixed(1)}%`;
+  }
+
+  // ========================================
+  // メイン画面
+  // ========================================
+
+  private renderDashboard(
+    stats: DashboardStatistics
+  ): void {
+    const root = this.contentEl;
+    root.empty();
+    root.addClass("kokushi-dashboard");
+
+    root.createEl("h2", {
+      text: "国試学習ダッシュボード",
+    });
+
+    const actions = root.createDiv({
+      cls: "kokushi-dashboard-actions",
+    });
+
+    const refreshButton = actions.createEl(
+      "button",
+      { text: "統計を更新" }
+    );
+
+    refreshButton.onclick = () => {
+      void this.refresh();
+    };
+
+    if (stats.invalidLines > 0) {
+      root.createEl("p", {
+        cls: "kokushi-dashboard-warning",
+        text:
+          `解答履歴に不正な行が` +
+          `${stats.invalidLines}件あります。` +
+          `これらを除いて集計しました。`,
+      });
+    }
+
+    root.createEl("p", {
+      text:
+        `読み込み済み問題数：` +
+        `${stats.totalQuestions}問`,
+    });
+
+    // ----------------------------------------
+    // 統計カード
+    // ----------------------------------------
+
+    const cards = root.createDiv({
+      cls: "kokushi-dashboard-cards",
+    });
+
+    const addCard = (
+      title: string,
+      value: string,
+      detail: string
+    ): void => {
+      const card = cards.createDiv({
+        cls: "kokushi-dashboard-card",
+      });
+
+      card.createEl("p", {
+        cls: "kokushi-dashboard-card-title",
+        text: title,
+      });
+
+      card.createEl("p", {
+        cls: "kokushi-dashboard-card-value",
+        text: value,
+      });
+
+      card.createEl("p", {
+        cls: "kokushi-dashboard-card-detail",
+        text: detail,
+      });
+    };
+
+    addCard(
+      "学習進捗",
+      `${stats.studiedQuestions} / ` +
+        `${stats.totalQuestions}`,
+      this.formatRate(stats.progressRate)
+    );
+
+    addCard(
+      "未回答問題",
+      `${stats.unansweredQuestions}問`,
+      "まだ解答したことのない問題"
+    );
+
+    addCard(
+      "最新正答率",
+      this.formatRate(stats.latestAccuracy),
+      `${stats.latestCorrect} / ` +
+        `${stats.latestGraded}問`
+    );
+
+    addCard(
+      "累積正答率",
+      this.formatRate(
+        stats.cumulativeAccuracy
+      ),
+      `${stats.cumulativeCorrect} / ` +
+        `${stats.cumulativeGraded}回`
+    );
+
+    addCard(
+      "要復習問題",
+      `${stats.reviewQuestions}問`,
+      "最新解答が不正解"
+    );
+
+    addCard(
+      "累積解答数",
+      `${stats.totalAttempts}回`,
+      "重複解答・採点除外を含む"
+    );
+
+    // ----------------------------------------
+    // 演習へのショートカット
+    // ----------------------------------------
+
+    const quizActions = root.createDiv({
+      cls: "kokushi-dashboard-actions",
+    });
+
+    const unansweredButton =
+      quizActions.createEl("button", {
+        text: "未回答問題を演習",
+      });
+
+    unansweredButton.disabled =
+      stats.unansweredQuestions === 0;
+
+    unansweredButton.onclick = () => {
+      void this.onStartQuiz("unanswered");
+    };
+
+    const incorrectButton =
+      quizActions.createEl("button", {
+        text: "要復習問題を演習",
+      });
+
+    incorrectButton.disabled =
+      stats.reviewQuestions === 0;
+
+    incorrectButton.onclick = () => {
+      void this.onStartQuiz("incorrect");
+    };
+
+    // ----------------------------------------
+    // 学習推移
+    // ----------------------------------------
+
+    root.createEl("h3", {
+      text: "日別学習推移",
+    });
+
+    const periodSelect = root.createEl("select");
+
+    const periods = [
+      { value: "7", text: "直近7日" },
+      { value: "30", text: "直近30日" },
+      { value: "all", text: "全期間" },
+    ];
+
+    for (const period of periods) {
+      const option =
+        periodSelect.createEl("option", {
+          text: period.text,
+        });
+
+      option.value = period.value;
+    }
+
+    periodSelect.value = this.period;
+
+    const chartArea = root.createDiv({
+      cls: "kokushi-dashboard-chart-area",
+    });
+
+    const updateCharts = (): void => {
+      chartArea.empty();
+
+      const days =
+        this.period === "all"
+          ? stats.daily
+          : stats.daily.slice(
+              -Number(this.period)
+            );
+
+      chartArea.createEl("h4", {
+        text: "日別解答回数",
+      });
+
+      this.renderBarChart(chartArea, days);
+
+      chartArea.createEl("h4", {
+        text: "日別正答率",
+      });
+
+      this.renderLineChart(chartArea, days);
+    };
+
+    periodSelect.addEventListener(
+      "change",
+      () => {
+        const value = periodSelect.value;
+
+        if (
+          value === "7" ||
+          value === "30" ||
+          value === "all"
+        ) {
+          this.period = value;
+          updateCharts();
+        }
+      }
+    );
+
+    updateCharts();
+
+    // ----------------------------------------
+    // 最近の解答履歴
+    // ----------------------------------------
+
+    root.createEl("h3", {
+      text: "最近の解答履歴",
+    });
+
+    if (stats.recent.length === 0) {
+      root.createEl("p", {
+        text: "解答履歴はまだありません。",
+      });
+      return;
+    }
+
+    const table = root.createEl("table", {
+      cls: "kokushi-dashboard-history",
+    });
+
+    const head = table.createEl("thead");
+    const headRow = head.createEl("tr");
+
+    for (const title of [
+      "問題",
+      "日時",
+      "解答",
+      "判定",
+    ]) {
+      headRow.createEl("th", {
+        text: title,
+      });
+    }
+
+    const body = table.createEl("tbody");
+
+    for (const attempt of stats.recent) {
+      const row = body.createEl("tr");
+
+      const idCell = row.createEl("td");
+
+      if (stats.availableIds.has(attempt.id)) {
+        const button = idCell.createEl(
+          "button",
+          {
+            text: attempt.id,
+            cls: "kokushi-dashboard-link",
+          }
+        );
+
+        button.onclick = () => {
+          void this.onOpenQuestion(attempt.id);
+        };
+      } else {
+        idCell.setText(attempt.id);
+      }
+
+      row.createEl("td", {
+        text: new Date(
+          attempt.timestamp
+        ).toLocaleString("ja-JP", {
+          timeZone: "Asia/Tokyo",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      });
+
+      row.createEl("td", {
+        text: attempt.selected.join(", "),
+      });
+
+      row.createEl("td", {
+        text:
+          attempt.correct === null
+            ? "採点除外"
+            : attempt.correct
+              ? "正解"
+              : "不正解",
+      });
+    }
+  }
+
+  // ========================================
+  // SVGグラフ共通処理
+  // ========================================
+
+  private createChartSvg(
+    root: HTMLElement,
+    days: DailyStatistics[]
+  ): {
+    svg: SVGSVGElement;
+    width: number;
+    height: number;
+  } {
+    const wrapper = root.createDiv({
+      cls: "kokushi-dashboard-chart-scroll",
+    });
+
+    const width = Math.max(
+      480,
+      days.length * 24 + 60
+    );
+
+    const height = 190;
+
+    const svg = createSvg("svg");
+
+    svg.setAttribute(
+      "viewBox",
+      `0 0 ${width} ${height}`
+    );
+
+    svg.setAttribute(
+      "width",
+      String(width)
+    );
+
+    svg.setAttribute(
+      "height",
+      String(height)
+    );
+
+    svg.setAttribute("role", "img");
+    wrapper.appendChild(svg);
+
+    return { svg, width, height };
+  }
+
+  private addSvgElement(
+    svg: SVGSVGElement,
+    tag: "rect" | "line" | "circle" | "text",
+    attributes: Record<string, string>,
+    text?: string
+  ): void {
+    const element = createSvg(tag);
+
+    for (const [name, value] of Object.entries(
+      attributes
+    )) {
+      element.setAttribute(name, value);
+    }
+
+    if (text !== undefined) {
+      element.textContent = text;
+    }
+
+    svg.appendChild(element);
+  }
+
+  // ========================================
+  // 日別解答回数
+  // ========================================
+
+  private renderBarChart(
+    root: HTMLElement,
+    days: DailyStatistics[]
+  ): void {
+    const { svg, width } =
+      this.createChartSvg(root, days);
+
+    const top = 15;
+    const bottom = 155;
+    const left = 40;
+    const right = width - 15;
+
+    const plotHeight = bottom - top;
+    const plotWidth = right - left;
+
+    const maximum = Math.max(
+      1,
+      ...days.map(day => day.attempts)
+    );
+
+    const step = plotWidth /
+      Math.max(days.length, 1);
+
+    const barWidth = Math.max(
+      2,
+      Math.min(15, step * 0.7)
+    );
+
+    this.addSvgElement(svg, "line", {
+      x1: String(left),
+      y1: String(bottom),
+      x2: String(right),
+      y2: String(bottom),
+      stroke: "currentColor",
+      "stroke-opacity": "0.4",
+    });
+
+    days.forEach((day, index) => {
+      const height =
+        day.attempts / maximum * plotHeight;
+
+      const x =
+        left + index * step +
+        (step - barWidth) / 2;
+
+      const y = bottom - height;
+
+      this.addSvgElement(svg, "rect", {
+        x: String(x),
+        y: String(y),
+        width: String(barWidth),
+        height: String(height),
+        rx: "2",
+        fill: "var(--interactive-accent)",
+      });
+
+      const labelInterval = Math.max(
+        1,
+        Math.ceil(days.length / 8)
+      );
+
+      if (index % labelInterval === 0) {
+        this.addSvgElement(
+          svg,
+          "text",
+          {
+            x: String(x),
+            y: "176",
+            fill: "currentColor",
+            "font-size": "10",
+          },
+          day.date.slice(5)
+        );
+      }
+    });
+
+    root.createEl("p", {
+      cls: "kokushi-dashboard-chart-caption",
+      text:
+        "縦軸：解答回数 " +
+        `（最大 ${maximum}回）`,
+    });
+  }
+
+  // ========================================
+  // 日別正答率
+  // ========================================
+
+  private renderLineChart(
+    root: HTMLElement,
+    days: DailyStatistics[]
+  ): void {
+    const { svg, width } =
+      this.createChartSvg(root, days);
+
+    const top = 15;
+    const bottom = 155;
+    const left = 40;
+    const right = width - 15;
+
+    const plotWidth = right - left;
+    const plotHeight = bottom - top;
+
+    const step =
+      plotWidth /
+      Math.max(days.length - 1, 1);
+
+    for (const rate of [0, 50, 100]) {
+      const y =
+        bottom - rate / 100 * plotHeight;
+
+      this.addSvgElement(svg, "line", {
+        x1: String(left),
+        y1: String(y),
+        x2: String(right),
+        y2: String(y),
+        stroke: "currentColor",
+        "stroke-opacity": "0.15",
+      });
+
+      this.addSvgElement(
+        svg,
+        "text",
+        {
+          x: "2",
+          y: String(y + 4),
+          fill: "currentColor",
+          "font-size": "11",
+        },
+        `${rate}%`
+      );
+    }
+
+    let previous:
+      { x: number; y: number } | null = null;
+
+    days.forEach((day, index) => {
+      if (day.accuracy === null) {
+        // 採点対象の解答がない日は線を切る
+        previous = null;
+        return;
+      }
+
+      const x = left + index * step;
+      const y =
+        bottom -
+        day.accuracy / 100 * plotHeight;
+
+      if (previous) {
+        this.addSvgElement(svg, "line", {
+          x1: String(previous.x),
+          y1: String(previous.y),
+          x2: String(x),
+          y2: String(y),
+          stroke: "var(--interactive-accent)",
+          "stroke-width": "2",
+        });
+      }
+
+      this.addSvgElement(svg, "circle", {
+        cx: String(x),
+        cy: String(y),
+        r: "3",
+        fill: "var(--interactive-accent)",
+      });
+
+      previous = { x, y };
+
+      const labelInterval = Math.max(
+        1,
+        Math.ceil(days.length / 8)
+      );
+
+      if (index % labelInterval === 0) {
+        this.addSvgElement(
+          svg,
+          "text",
+          {
+            x: String(x),
+            y: "176",
+            fill: "currentColor",
+            "font-size": "10",
+          },
+          day.date.slice(5)
+        );
+      }
+    });
+
+    root.createEl("p", {
+      cls: "kokushi-dashboard-chart-caption",
+      text:
+        "採点対象の解答がない日は" +
+        "正答率を表示しません。",
+    });
+  }
+}

@@ -1022,4 +1022,85 @@ export class QuizView extends ItemView {
       void this.renderScopeSelection();
     };
   }
+
+  // ========================================
+  // ダッシュボードからの演習開始
+  // ========================================
+
+  public async startFromDashboard(
+    target: "unanswered" | "incorrect"
+  ): Promise<void> {
+    await this.loadQuestions();
+
+    const attempts =
+      await this.attemptService.getAttempts();
+
+    const latestResults =
+      new Map<string, boolean | null>();
+
+    for (const attempt of attempts) {
+      latestResults.set(
+        attempt.id,
+        attempt.correct
+      );
+    }
+
+    this.quizScope = {
+      exam: "all",
+      section: "all",
+      order: "sequential",
+      target,
+    };
+
+    this.questions = this.allQuestions.filter(
+      question => {
+        if (target === "unanswered") {
+          return !latestResults.has(question.id);
+        }
+
+        return (
+          latestResults.get(question.id) === false
+        );
+      }
+    );
+
+    this.index = 0;
+    this.resetAnswer();
+
+    await this.renderQuiz();
+  }
+
+  // ========================================
+  // ダッシュボードから個別問題を開く
+  // ========================================
+
+  public async openQuestionFromDashboard(
+    id: string
+  ): Promise<void> {
+    await this.loadQuestions();
+
+    const question = this.allQuestions.find(
+      item => item.id === id
+    );
+
+    if (!question) {
+      new Notice(
+        `問題 ${id} が見つかりません`
+      );
+      return;
+    }
+
+    this.quizScope = {
+      exam: "all",
+      section: "all",
+      order: "sequential",
+      target: "all",
+    };
+
+    this.questions = [question];
+    this.index = 0;
+    this.resetAnswer();
+
+    await this.renderQuiz();
+  }
 }
