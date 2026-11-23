@@ -364,3 +364,98 @@ If your plugin does not need CSS, delete this file.
   border-color: var(--background-modifier-border);
   transform: none;
 }
+
+
+/* ========================================
+   問題間ナビゲーション
+   ======================================== */
+
+.kokushi-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.kokushi-navigation button {
+  flex: 1;
+  min-width: 120px;
+  min-height: 40px;
+}
+
+.kokushi-navigation button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+
+/* ========================================
+   「わからない」ボタン
+   ======================================== */
+
+.kokushi-unknown-button {
+  display: block;
+  width: 100%;
+  margin: 16px 0 8px;
+  padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+
+  background: var(--background-secondary);
+  color: var(--text-normal);
+
+  transition: none !important;
+  animation: none !important;
+  transform: none !important;
+  box-shadow: none !important;
+
+  -webkit-tap-highlight-color: transparent;
+}
+
+.kokushi-unknown-button.is-selected,
+.kokushi-unknown-button.is-selected:hover,
+.kokushi-unknown-button.is-selected:active,
+.kokushi-unknown-button.is-selected:focus {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  box-shadow: none;
+}
+
+.kokushi-unknown-button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+
+/* ========================================
+   モバイル版：画面最下部の操作領域を確保
+   ======================================== */
+
+/* 国試演習ビュー・ダッシュボード共通 */
+.kokushi-quiz,
+.kokushi-dashboard {
+  box-sizing: border-box;
+  padding-bottom: calc(
+    120px + env(safe-area-inset-bottom, 0px)
+  ) !important;
+}
+
+/* 最後の操作ボタンを隠さない */
+.kokushi-start-button,
+.kokushi-navigation,
+.kokushi-dashboard-history {
+  margin-bottom: 24px;
+}
+
+/* iPhone・iPad向け */
+@media (max-width: 768px) {
+  .kokushi-quiz,
+  .kokushi-dashboard {
+    padding-bottom: calc(
+      160px + env(safe-area-inset-bottom, 0px)
+    ) !important;
+  }
+}
