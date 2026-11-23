@@ -1,114 +1,70 @@
+
+import { Plugin } from "obsidian";
+
 import {
-	Editor,
-	MarkdownView,
-	MarkdownFileInfo,
-	Modal,
-	Notice,
-	Plugin,
-} from 'obsidian';
-import {
-	DEFAULT_SETTINGS,
-	MyPluginSettings,
-	SampleSettingTab,
-} from './settings';
+  QuizView,
+  VIEW_TYPE_KOKUSHI,
+} from "./views/QuizView";
 
-// Remember to rename these classes and interfaces!
+import { QuestionService } from "./services/QuestionService";
+import { AttemptService } from "./services/AttemptService";
 
-export default class MyPlugin extends Plugin {
-	settings!: MyPluginSettings;
+export default class KokushiPlugin extends Plugin {
+  async onload(): Promise<void> {
+    const questionService =
+      new QuestionService(this.app);
 
-	async onload() {
-		await this.loadSettings();
+    const attemptService =
+      new AttemptService(this.app);
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
+    this.registerView(
+      VIEW_TYPE_KOKUSHI,
+      leaf => new QuizView(
+        leaf,
+        questionService,
+        attemptService
+      )
+    );
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
+    this.addRibbonIcon(
+      "graduation-cap",
+      "国試演習を開く",
+      () => {
+        void this.activateQuiz();
+      }
+    );
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			},
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (
-				editor: Editor,
-				_ctx: MarkdownView | MarkdownFileInfo,
-			) => {
-				editor.replaceSelection('Sample editor command');
-			},
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView =
-					this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+    this.addCommand({
+      id: "open-quiz",
+      name: "国試演習を開く",
+      callback: () => {
+        void this.activateQuiz();
+      },
+    });
+  }
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			},
-		});
+  private async activateQuiz(): Promise<void> {
+    const workspace = this.app.workspace;
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+    const existing =
+      workspace.getLeavesOfType(VIEW_TYPE_KOKUSHI);
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(activeDocument, 'click', (_evt: MouseEvent) => {
-			new Notice('Click');
-		});
+    const leaf = existing[0] ??
+      workspace.getLeaf("tab");
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(
-			window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000),
-		);
-	}
+    if (existing.length === 0) {
+      await leaf.setViewState({
+        type: VIEW_TYPE_KOKUSHI,
+        active: true,
+      });
+    }
 
-	onunload() {}
+    await workspace.revealLeaf(leaf);
+  }
 
-	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<MyPluginSettings>,
-		);
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-	}
+  onunload(): void {
+    this.app.workspace.detachLeavesOfType(
+      VIEW_TYPE_KOKUSHI
+    );
+  }
 }

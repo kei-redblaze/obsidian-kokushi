@@ -6,3 +6,70 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+.kokushi-quiz {
+  padding: 16px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.kokushi-header {
+  margin-bottom: 24px;
+}
+
+.kokushi-question {
+  margin-bottom: 24px;
+}
+
+.kokushi-answer {
+  margin-bottom: 20px;
+}
+
+.kokushi-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.kokushi-option:hover {
+  background: var(--background-modifier-hover);
+}
+
+.kokushi-option input {
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.kokushi-option-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.kokushi-option-text p {
+  margin: 0;
+}
+
+.kokushi-numeric-input {
+  width: 180px;
+  font-size: 18px;
+}
+
+.kokushi-submit {
+  margin-top: 12px;
+}
+
+.kokushi-result {
+  margin-top: 24px;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--background-secondary);
+}
+
+.kokushi-navigation {
+  margin-top: 20px;
+}
