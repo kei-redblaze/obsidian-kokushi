@@ -8,6 +8,7 @@ import {
 
 import {
   Question,
+  Attempt,
   GradeResult,
 } from "../types";
 
@@ -22,13 +23,35 @@ type Option = {
   markdown: string;
 };
 
-export class QuizView extends ItemView {
-  private questions: Question[] = [];
-  private index = 0;
+type OrderMode = "sequential" | "random";
 
+type TargetMode =
+  | "all"
+  | "unanswered"
+  | "incorrect";
+
+type Scope = {
+  exam: string;
+  section: string;
+  order: OrderMode;
+  target: TargetMode;
+};
+
+export class QuizView extends ItemView {
+  private allQuestions: Question[] = [];
+  private questions: Question[] = [];
+
+  private index = 0;
   private selected: string[] = [];
   private graded: GradeResult | null = null;
   private saving = false;
+
+  private quizScope: Scope = {
+    exam: "all",
+    section: "all",
+    order: "sequential",
+    target: "all",
+  };
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -59,6 +82,7 @@ export class QuizView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.allQuestions = [];
     this.questions = [];
   }
 
@@ -74,23 +98,357 @@ export class QuizView extends ItemView {
     });
 
     try {
-      this.questions =
+      this.allQuestions =
         await this.questionService.getQuestions();
 
+      this.questions = [];
       this.index = 0;
       this.resetAnswer();
 
-      await this.renderQuiz();
+      await this.renderScopeSelection();
     } catch (error) {
-      console.error(error);
+      console.error("[Kokushi] Load error", error);
 
       this.contentEl.empty();
+
       this.contentEl.createEl("p", {
         text: "問題の読み込みに失敗しました。",
       });
 
       new Notice("問題の読み込みに失敗しました");
     }
+  }
+
+  // ========================================
+  // 問題ID解析
+  // ========================================
+
+  private parseQuestionId(id: string): {
+    exam: string;
+    section: string;
+    number: number;
+  } | null {
+    const match = id.match(
+      /^(\d+)([A-F])([1-9]\d*)$/
+    );
+
+    if (!match) return null;
+
+    return {
+      exam: match[1] ?? "",
+      section: match[2] ?? "",
+      number: Number(match[3]),
+    };
+  }
+
+  // ========================================
+  // 出題範囲選択
+  // ========================================
+
+  private async renderScopeSelection(): Promise<void> {
+    const container = this.contentEl;
+    container.empty();
+
+    container.createEl("p", {
+      text: "解答履歴を読み込んでいます...",
+    });
+
+    let attempts: Attempt[];
+
+    try {
+      attempts =
+        await this.attemptService.getAttempts();
+    } catch (error) {
+      console.error("[Kokushi] History error", error);
+
+      container.empty();
+
+      container.createEl("p", {
+        text: "解答履歴の読み込みに失敗しました。",
+      });
+
+      new Notice("解答履歴の読み込みに失敗しました");
+      return;
+    }
+
+    // 最後に記録された解答結果を使用
+    const latestResults =
+      new Map<string, boolean | null>();
+
+    for (const attempt of attempts) {
+      latestResults.set(
+        attempt.id,
+        attempt.correct
+      );
+    }
+
+    container.empty();
+    container.addClass("kokushi-quiz");
+
+    container.createEl("h2", {
+      text: "医師国家試験演習",
+    });
+
+    container.createEl("h3", {
+      text: "出題範囲を選択",
+    });
+
+    // ----------------------------------------
+    // 利用可能な回次
+    // ----------------------------------------
+
+    const exams = [
+      ...new Set(
+        this.allQuestions
+          .map(q => this.parseQuestionId(q.id)?.exam)
+          .filter((v): v is string => !!v)
+      ),
+    ].sort((a, b) => Number(b) - Number(a));
+
+    // ----------------------------------------
+    // 利用可能な問題冊子
+    // ----------------------------------------
+
+    const sections = [
+      ...new Set(
+        this.allQuestions
+          .map(q => this.parseQuestionId(q.id)?.section)
+          .filter((v): v is string => !!v)
+      ),
+    ].sort();
+
+    // ----------------------------------------
+    // セレクト要素生成
+    // ----------------------------------------
+
+    const createSelect = (
+      label: string,
+      options: Array<{
+        value: string;
+        text: string;
+      }>,
+      initialValue: string
+    ): HTMLSelectElement => {
+      container.createEl("h4", {
+        text: label,
+      });
+
+      const select = container.createEl("select");
+
+      for (const item of options) {
+        const option = select.createEl("option", {
+          text: item.text,
+        });
+
+        option.value = item.value;
+      }
+
+      select.value = initialValue;
+
+      return select;
+    };
+
+    // 回次
+    const examSelect = createSelect(
+      "回次",
+      [
+        { value: "all", text: "すべての回次" },
+        ...exams.map(exam => ({
+          value: exam,
+          text: `第${exam}回`,
+        })),
+      ],
+      this.quizScope.exam
+    );
+
+    // 問題冊子
+    const sectionSelect = createSelect(
+      "問題冊子",
+      [
+        { value: "all", text: "すべて" },
+        ...sections.map(section => ({
+          value: section,
+          text: section,
+        })),
+      ],
+      this.quizScope.section
+    );
+
+    // 出題順序
+    const orderSelect = createSelect(
+      "出題順序",
+      [
+        {
+          value: "sequential",
+          text: "問題番号順",
+        },
+        {
+          value: "random",
+          text: "ランダム",
+        },
+      ],
+      this.quizScope.order
+    );
+
+    // 出題対象
+    const targetSelect = createSelect(
+      "出題対象",
+      [
+        {
+          value: "all",
+          text: "全問題",
+        },
+        {
+          value: "unanswered",
+          text: "未回答問題のみ",
+        },
+        {
+          value: "incorrect",
+          text: "誤答問題のみ",
+        },
+      ],
+      this.quizScope.target
+    );
+
+    // ========================================
+    // フィルター
+    // ========================================
+
+    const getFilteredQuestions = (): Question[] => {
+      return this.allQuestions.filter(question => {
+        const parsed = this.parseQuestionId(
+          question.id
+        );
+
+        if (!parsed) return false;
+
+        // 回次
+        if (
+          this.quizScope.exam !== "all" &&
+          parsed.exam !== this.quizScope.exam
+        ) {
+          return false;
+        }
+
+        // 問題冊子
+        if (
+          this.quizScope.section !== "all" &&
+          parsed.section !== this.quizScope.section
+        ) {
+          return false;
+        }
+
+        // 未回答問題
+        if (this.quizScope.target === "unanswered") {
+          return !latestResults.has(question.id);
+        }
+
+        // 最新結果が誤答
+        if (this.quizScope.target === "incorrect") {
+          return (
+            latestResults.get(question.id) === false
+          );
+        }
+
+        return true;
+      });
+    };
+
+    // ========================================
+    // 問題数表示
+    // ========================================
+
+    const countEl = container.createEl("p", {
+      cls: "kokushi-count",
+    });
+
+    const startButton = container.createEl("button", {
+      text: "演習開始",
+      cls: "mod-cta",
+    });
+
+    const updateCount = (): void => {
+      const count = getFilteredQuestions().length;
+
+      countEl.setText(
+        `出題問題数：${count}問`
+      );
+
+      startButton.disabled = count === 0;
+    };
+
+    // ========================================
+    // 選択変更イベント
+    // ========================================
+
+    examSelect.addEventListener("change", () => {
+      this.quizScope.exam = examSelect.value;
+      updateCount();
+    });
+
+    sectionSelect.addEventListener("change", () => {
+      this.quizScope.section = sectionSelect.value;
+      updateCount();
+    });
+
+    orderSelect.addEventListener("change", () => {
+      this.quizScope.order =
+        orderSelect.value === "random"
+          ? "random"
+          : "sequential";
+
+      updateCount();
+    });
+
+    targetSelect.addEventListener("change", () => {
+      const value = targetSelect.value;
+
+      if (
+        value === "all" ||
+        value === "unanswered" ||
+        value === "incorrect"
+      ) {
+        this.quizScope.target = value;
+      }
+
+      updateCount();
+    });
+
+    // ========================================
+    // 演習開始
+    // ========================================
+
+    startButton.addEventListener("click", () => {
+      const filtered = getFilteredQuestions();
+
+      if (filtered.length === 0) return;
+
+      if (this.quizScope.order === "random") {
+        // Fisher-Yates shuffle
+        for (
+          let i = filtered.length - 1;
+          i > 0;
+          i--
+        ) {
+          const j = Math.floor(
+            Math.random() * (i + 1)
+          );
+
+          const temp = filtered[i];
+
+          filtered[i] = filtered[j]!;
+          filtered[j] = temp!;
+        }
+      }
+
+      this.questions = filtered;
+      this.index = 0;
+      this.resetAnswer();
+
+      void this.renderQuiz();
+    });
+
+    updateCount();
   }
 
   // ========================================
@@ -110,11 +468,10 @@ export class QuizView extends ItemView {
   private getRequiredChoices(
     question: Question
   ): number {
-    if (question.type === "single") {
-      return 1;
-    }
-
-    if (question.type === "numeric") {
+    if (
+      question.type === "single" ||
+      question.type === "numeric"
+    ) {
       return 1;
     }
 
@@ -126,20 +483,28 @@ export class QuizView extends ItemView {
       return false;
     }
 
-    const required = this.getRequiredChoices(
-      question
-    );
-
     if (question.type === "numeric") {
       return (
         this.selected.length === 1 &&
-        /^\d+$/.test(this.selected[0])
+        /^\d+$/.test(this.selected[0] ?? "")
       );
+    }
+
+    const required = this.getRequiredChoices(question);
+
+    // 採点除外問題では必要選択数を
+    // 正答データから取得できないため特別扱い
+    if (
+      question.excluded &&
+      question.answer.length === 0
+    ) {
+      return this.selected.length > 0;
     }
 
     return (
       required > 0 &&
-      this.selected.length === required
+      this.selected.length === required &&
+      new Set(this.selected).size === required
     );
   }
 
@@ -154,8 +519,7 @@ export class QuizView extends ItemView {
     const lines = markdown.split(/\r?\n/);
 
     const start = lines.findIndex(
-      line =>
-        line.trim() === `## ${heading}`
+      line => line.trim() === `## ${heading}`
     );
 
     if (start === -1) {
@@ -179,9 +543,7 @@ export class QuizView extends ItemView {
     return result.join("\n").trim();
   }
 
-  private parseOptions(
-    markdown: string
-  ): Option[] {
+  private parseOptions(markdown: string): Option[] {
     const lines = markdown.split(/\r?\n/);
     const options: Option[] = [];
 
@@ -198,8 +560,8 @@ export class QuizView extends ItemView {
         }
 
         current = {
-          id: match[1],
-          markdown: match[2],
+          id: match[1] ?? "",
+          markdown: match[2] ?? "",
         };
       } else if (current) {
         current.markdown += "\n" + line;
@@ -214,7 +576,7 @@ export class QuizView extends ItemView {
   }
 
   // ========================================
-  // メイン画面描画
+  // 問題表示
   // ========================================
 
   private async renderQuiz(): Promise<void> {
@@ -245,6 +607,19 @@ export class QuizView extends ItemView {
         `(${this.index + 1} / ${this.questions.length})`,
     });
 
+    const backButton = header.createEl("button", {
+      text: "範囲選択に戻る",
+    });
+
+    backButton.disabled = this.saving;
+
+    backButton.onclick = () => {
+      if (this.saving) return;
+
+      this.resetAnswer();
+      void this.renderScopeSelection();
+    };
+
     // 問題文
     const questionMarkdown = this.getSection(
       question.markdown,
@@ -274,7 +649,6 @@ export class QuizView extends ItemView {
       cls: "kokushi-answer",
     });
 
-    // 採点ボタン
     const submitButton = container.createEl(
       "button",
       {
@@ -283,8 +657,7 @@ export class QuizView extends ItemView {
       }
     );
 
-    // 入力時に採点ボタンを更新
-    const updateSubmit = () => {
+    const updateSubmit = (): void => {
       submitButton.disabled =
         !this.canSubmit(question);
     };
@@ -312,6 +685,11 @@ export class QuizView extends ItemView {
     updateSubmit();
 
     submitButton.onclick = async () => {
+      if (!this.canSubmit(question)) return;
+
+      // 二重送信防止
+      submitButton.disabled = true;
+
       await this.submitAnswer(question);
     };
 
@@ -343,13 +721,12 @@ export class QuizView extends ItemView {
       return;
     }
 
-    const required = this.getRequiredChoices(
-      question
-    );
+    const required = this.getRequiredChoices(question);
 
     container.createEl("p", {
-      text:
-        question.type === "single"
+      text: question.excluded && required === 0
+        ? "解答を選択してください（採点除外）。"
+        : question.type === "single"
           ? "1つ選択してください。"
           : `${required}つ選択してください。`,
     });
@@ -370,6 +747,7 @@ export class QuizView extends ItemView {
 
       input.name = "kokushi-choice";
       input.value = option.id;
+
       input.checked =
         this.selected.includes(option.id);
 
@@ -381,7 +759,9 @@ export class QuizView extends ItemView {
         cls: "kokushi-option-text",
       });
 
-      textEl.createSpan().setText(`${option.id}. `);
+      textEl.createSpan().setText(
+        `${option.id}. `
+      );
 
       const markdownEl = textEl.createDiv();
 
@@ -394,7 +774,7 @@ export class QuizView extends ItemView {
       );
 
       input.addEventListener("change", () => {
-        if (this.graded !== null) {
+        if (this.graded !== null || this.saving) {
           return;
         }
 
@@ -402,12 +782,18 @@ export class QuizView extends ItemView {
           this.selected = [option.id];
         } else {
           if (input.checked) {
-            if (this.selected.length >= required) {
+            // 除外問題は正答配列が空の場合あり
+            if (
+              required > 0 &&
+              this.selected.length >= required
+            ) {
               input.checked = false;
               return;
             }
 
-            this.selected.push(option.id);
+            if (!this.selected.includes(option.id)) {
+              this.selected.push(option.id);
+            }
           } else {
             this.selected = this.selected.filter(
               id => id !== option.id
@@ -415,11 +801,10 @@ export class QuizView extends ItemView {
           }
         }
 
-        // UIと内部状態を同期
+        // UIのチェック状態を同期
         for (const item of inputs) {
-          item.checked = this.selected.includes(
-            item.value
-          );
+          item.checked =
+            this.selected.includes(item.value);
         }
 
         updateSubmit();
@@ -428,7 +813,7 @@ export class QuizView extends ItemView {
   }
 
   // ========================================
-  // 数値解答問題
+  // 数値解答
   // ========================================
 
   private renderNumericInput(
@@ -448,11 +833,12 @@ export class QuizView extends ItemView {
 
     input.inputMode = "numeric";
     input.autocomplete = "off";
+
     input.value = this.selected[0] ?? "";
     input.disabled = this.graded !== null;
 
     input.addEventListener("input", () => {
-      if (this.graded !== null) {
+      if (this.graded !== null || this.saving) {
         return;
       }
 
@@ -467,7 +853,7 @@ export class QuizView extends ItemView {
   }
 
   // ========================================
-  // 解答確定・履歴保存
+  // 採点・履歴保存
   // ========================================
 
   private async submitAnswer(
@@ -498,10 +884,14 @@ export class QuizView extends ItemView {
       });
 
       this.graded = result;
+      this.saving = false;
 
       await this.renderQuiz();
     } catch (error) {
-      console.error(error);
+      console.error(
+        "[Kokushi] Attempt save error",
+        error
+      );
 
       this.saving = false;
 
@@ -543,7 +933,6 @@ export class QuizView extends ItemView {
       resultEl.createEl("p", {
         text: "この問題は採点対象外です。",
       });
-
       return;
     }
 
@@ -561,7 +950,7 @@ export class QuizView extends ItemView {
   }
 
   // ========================================
-  // ナビゲーション
+  // 次の問題
   // ========================================
 
   private renderNavigation(
@@ -599,7 +988,7 @@ export class QuizView extends ItemView {
 
     if (this.questions.length === 0) {
       container.createEl("p", {
-        text: "問題データが見つかりません。",
+        text: "問題がありません。",
       });
     } else {
       container.createEl("p", {
@@ -614,11 +1003,23 @@ export class QuizView extends ItemView {
       }
     );
 
-    restartButton.onclick = async () => {
+    restartButton.onclick = () => {
       this.index = 0;
       this.resetAnswer();
 
-      await this.renderQuiz();
+      void this.renderQuiz();
+    };
+
+    const scopeButton = container.createEl(
+      "button",
+      {
+        text: "出題範囲を選び直す",
+      }
+    );
+
+    scopeButton.onclick = () => {
+      this.resetAnswer();
+      void this.renderScopeSelection();
     };
   }
 }
