@@ -76,7 +76,6 @@ export class QuizView extends ItemView {
 
   private allQuestions: Question[] = [];
   private questions: Question[] = [];
-
   private index = 0;
 
   // ========================================
@@ -146,11 +145,29 @@ export class QuizView extends ItemView {
   }
 
   // ========================================
+  // スクロール位置管理
+  // ========================================
+
+  private resetScroll(): void {
+    this.contentEl.scrollTop = 0;
+  }
+
+  // DOMの描画後にもスクロール位置を調整する
+  private resetScrollAfterRender(): void {
+    this.resetScroll();
+
+    window.requestAnimationFrame(() => {
+      this.resetScroll();
+    });
+  }
+
+  // ========================================
   // 問題読み込み
   // ========================================
 
   private async loadQuestions(): Promise<void> {
     this.contentEl.empty();
+    this.resetScroll();
 
     this.contentEl.createEl("p", {
       text: "問題を読み込んでいます...",
@@ -203,13 +220,15 @@ export class QuizView extends ItemView {
   }
 
   // ========================================
-  // 出題範囲選択：ボタン式UI
+  // 出題範囲選択
   // ========================================
 
   private async renderScopeSelection(): Promise<void> {
     const root = this.contentEl;
 
     root.empty();
+    this.resetScroll();
+
     root.removeClass("kokushi-scope");
 
     root.createEl("p", {
@@ -241,7 +260,7 @@ export class QuizView extends ItemView {
     }
 
     // ----------------------------------------
-    // 問題ID別の最新解答結果
+    // 最新解答結果
     // ----------------------------------------
 
     const latestResults =
@@ -303,7 +322,6 @@ export class QuizView extends ItemView {
       ),
     ].sort();
 
-    // 存在しない回次を選択状態から除外
     if (this.quizScope.exams !== null) {
       this.quizScope.exams =
         this.quizScope.exams.filter(
@@ -340,7 +358,7 @@ export class QuizView extends ItemView {
           return false;
         }
 
-        // 未回答問題のみ
+        // 未回答のみ
         if (
           this.quizScope.target === "unanswered"
         ) {
@@ -365,7 +383,7 @@ export class QuizView extends ItemView {
     };
 
     // ========================================
-    // 出題数の取得
+    // 指定問題数
     // ========================================
 
     const getRequestedCount = (
@@ -411,9 +429,9 @@ export class QuizView extends ItemView {
       return group;
     };
 
-    // ========================================
+    // ----------------------------------------
     // 問題数プレビュー
-    // ========================================
+    // ----------------------------------------
 
     const preview = root.createDiv({
       cls: "kokushi-scope-preview",
@@ -425,13 +443,11 @@ export class QuizView extends ItemView {
       cls: "kokushi-count-error",
     });
 
-    const startButton = root.createEl(
-      "button",
-      {
+    const startButton =
+      root.createEl("button", {
         text: "演習開始",
         cls: "mod-cta kokushi-start-button",
-      }
-    );
+      });
 
     startButton.type = "button";
 
@@ -488,7 +504,7 @@ export class QuizView extends ItemView {
     };
 
     // ----------------------------------------
-    // 単一選択ボタン
+    // 単一選択ボタングループ
     // ----------------------------------------
 
     const createButtons = (
@@ -790,7 +806,7 @@ export class QuizView extends ItemView {
       updateCount();
     });
 
-    // プレビューを最下部に配置
+    // プレビューと開始ボタンを末尾へ
     root.appendChild(preview);
     root.appendChild(startButton);
 
@@ -812,7 +828,7 @@ export class QuizView extends ItemView {
         return;
       }
 
-      // ランダム化は問題数の制限より先
+      // 全候補をシャッフルしてから抽出
       if (this.quizScope.order === "random") {
         for (
           let i = filtered.length - 1;
@@ -840,10 +856,11 @@ export class QuizView extends ItemView {
 
       this.resetSession();
 
-      void this.renderQuiz();
+      void this.renderQuiz(true);
     });
 
     updateCount();
+    this.resetScrollAfterRender();
   }
 
   // ========================================
@@ -897,15 +914,13 @@ export class QuizView extends ItemView {
 
   // ========================================
   // 問題間移動
-  // 未採点でも移動可能
+  // 未採点でも移動できる
   // ========================================
 
   private async moveToQuestion(
     newIndex: number
   ): Promise<void> {
-    if (this.saving) {
-      return;
-    }
+    if (this.saving) return;
 
     if (
       newIndex < 0 ||
@@ -914,8 +929,7 @@ export class QuizView extends ItemView {
       return;
     }
 
-    // 現在の状態を保存
-    // 未採点の場合はメモリのみ
+    // 未採点でも状態だけメモリ保存
     this.saveCurrentState();
 
     this.index = newIndex;
@@ -926,7 +940,8 @@ export class QuizView extends ItemView {
       this.restoreState(newIndex);
     }
 
-    await this.renderQuiz();
+    // 問題遷移時は最上部へ戻す
+    await this.renderQuiz(true);
   }
 
   // ========================================
@@ -936,13 +951,12 @@ export class QuizView extends ItemView {
   private async openSessionResults(): Promise<void> {
     if (this.saving) return;
 
-    // 未採点の回答途中状態も保持
     this.saveCurrentState();
 
     this.index = this.questions.length;
     this.resetAnswer();
 
-    await this.renderQuiz();
+    await this.renderQuiz(true);
   }
 
   private getCurrentQuestion(): Question | null {
@@ -980,7 +994,7 @@ export class QuizView extends ItemView {
       return false;
     }
 
-    // 「わからない」選択時
+    // 「わからない」は採点可能
     if (this.unknown) {
       return true;
     }
@@ -1089,13 +1103,27 @@ export class QuizView extends ItemView {
   }
 
   // ========================================
-  // 問題表示
+  // 問題画面
+  //
+  // resetScroll:
+  // true  = 画面遷移時に最上部へ
+  // false = 再描画後も現在位置を維持
   // ========================================
 
-  private async renderQuiz(): Promise<void> {
+  private async renderQuiz(
+    resetScroll = true
+  ): Promise<void> {
     const container = this.contentEl;
 
+    // スクロール位置を保持する再描画に備える
+    const previousScroll = container.scrollTop;
+
     container.empty();
+
+    if (resetScroll) {
+      this.resetScroll();
+    }
+
     container.removeClass("kokushi-scope");
     container.addClass("kokushi-quiz");
 
@@ -1103,6 +1131,13 @@ export class QuizView extends ItemView {
 
     if (!question) {
       this.renderFinished(container);
+
+      if (resetScroll) {
+        this.resetScrollAfterRender();
+      } else {
+        container.scrollTop = previousScroll;
+      }
+
       return;
     }
 
@@ -1124,12 +1159,14 @@ export class QuizView extends ItemView {
         `(${this.index + 1} / ${this.questions.length})`,
     });
 
-    const backButton = header.createEl(
-      "button",
-      {
+    // ----------------------------------------
+    // 出題範囲選択画面へ
+    // ----------------------------------------
+
+    const backButton =
+      header.createEl("button", {
         text: "範囲選択に戻る",
-      }
-    );
+      });
 
     backButton.disabled = this.saving;
 
@@ -1243,12 +1280,12 @@ export class QuizView extends ItemView {
       this.unknown = !this.unknown;
 
       if (this.unknown) {
-        // 通常回答と併用しない
         this.selected = [];
       }
 
-      // この時点では採点・保存しない
-      void this.renderQuiz();
+      // ボタン操作は画面遷移ではない
+      // スクロール位置を維持する
+      void this.renderQuiz(false);
     };
 
     // ========================================
@@ -1291,6 +1328,22 @@ export class QuizView extends ItemView {
     // ========================================
 
     this.renderNavigation(container);
+
+    // ========================================
+    // 描画完了後のスクロール位置調整
+    // ========================================
+
+    if (resetScroll) {
+      this.resetScrollAfterRender();
+    } else {
+      // 「わからない」切替・採点などの再描画
+      // ではユーザーの閲覧位置を維持
+      container.scrollTop = previousScroll;
+
+      window.requestAnimationFrame(() => {
+        container.scrollTop = previousScroll;
+      });
+    }
   }
 
   // ========================================
@@ -1511,10 +1564,10 @@ export class QuizView extends ItemView {
       this.graded = result;
       this.saving = false;
 
-      // 採点済み状態を保存
       this.saveCurrentState();
 
-      await this.renderQuiz();
+      // 採点後は現在のスクロール位置を維持
+      await this.renderQuiz(false);
     } catch (error) {
       console.error(
         "[Kokushi] Attempt save error",
@@ -1527,7 +1580,7 @@ export class QuizView extends ItemView {
         "解答履歴を保存できませんでした。"
       );
 
-      await this.renderQuiz();
+      await this.renderQuiz(false);
     }
   }
 
@@ -1622,6 +1675,8 @@ export class QuizView extends ItemView {
         text: isLast
           ? "演習終了"
           : "次の問題 →",
+
+        // 採点済みだけ紫色
         cls: this.graded !== null
           ? "mod-cta"
           : "",
@@ -1641,13 +1696,11 @@ export class QuizView extends ItemView {
     // 演習結果を確認
     // ----------------------------------------
 
-    const resultButton = container.createEl(
-      "button",
-      {
+    const resultButton =
+      container.createEl("button", {
         text: "演習結果を見る",
         cls: "kokushi-view-results",
-      }
-    );
+      });
 
     resultButton.disabled = this.saving;
 
@@ -1909,9 +1962,10 @@ export class QuizView extends ItemView {
       text: "演習した問題の一覧",
     });
 
-    const tableWrapper = container.createDiv({
-      cls: "kokushi-session-table-wrapper",
-    });
+    const tableWrapper =
+      container.createDiv({
+        cls: "kokushi-session-table-wrapper",
+      });
 
     const table = tableWrapper.createEl(
       "table",
@@ -2056,7 +2110,7 @@ export class QuizView extends ItemView {
     restartButton.onclick = () => {
       this.resetSession();
 
-      void this.renderQuiz();
+      void this.renderQuiz(true);
     };
 
     // ----------------------------------------
@@ -2124,7 +2178,7 @@ export class QuizView extends ItemView {
 
     this.resetSession();
 
-    await this.renderQuiz();
+    await this.renderQuiz(true);
   }
 
   // ========================================
@@ -2162,6 +2216,6 @@ export class QuizView extends ItemView {
 
     this.resetSession();
 
-    await this.renderQuiz();
+    await this.renderQuiz(true);
   }
 }
