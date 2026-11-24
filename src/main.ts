@@ -45,7 +45,8 @@ export default class KokushiPlugin extends Plugin {
         questionService,
         attemptService,
         sessionService,
-        studyService
+        studyService,
+        () => this.openDashboard(true)
       )
     );
 
@@ -131,33 +132,12 @@ export default class KokushiPlugin extends Plugin {
       )
     );
 
-    // ダッシュボードを開く
-    const openDashboard = async (): Promise<void> => {
-      const workspace = this.app.workspace;
-
-      const leaf =
-        workspace.getLeavesOfType(
-          VIEW_TYPE_DASHBOARD
-        )[0] ?? workspace.getLeaf("tab");
-
-      if (
-        leaf.getViewState().type !==
-        VIEW_TYPE_DASHBOARD
-      ) {
-        await leaf.setViewState({
-          type: VIEW_TYPE_DASHBOARD,
-          active: true,
-        });
-      }
-      await workspace.revealLeaf(leaf);
-    };
-
     // リボンアイコン
     this.addRibbonIcon(
       "chart-no-axes-combined",
       "ダッシュボード",
       () => {
-        void openDashboard();
+        void this.openDashboard();
       }
     );
 
@@ -166,9 +146,23 @@ export default class KokushiPlugin extends Plugin {
       id: "open-kokushi-dashboard",
       name: "ダッシュボードを開く",
       callback: () => {
-        void openDashboard();
+        void this.openDashboard();
       },
     });
+  }
+
+  private async openDashboard(showOverview = false): Promise<void> {
+    const workspace = this.app.workspace;
+    const existing = workspace.getLeavesOfType(VIEW_TYPE_DASHBOARD)[0];
+    const leaf = existing ?? workspace.getLeaf("tab");
+    if (!existing) {
+      await leaf.setViewState({ type: VIEW_TYPE_DASHBOARD, active: true });
+    }
+
+    await workspace.revealLeaf(leaf);
+    if (showOverview && existing && leaf.view instanceof DashboardView) {
+      await leaf.view.showOverview();
+    }
   }
 
   private async activateQuiz(): Promise<void> {

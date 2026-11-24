@@ -34,6 +34,8 @@ export interface SessionResult {
   accuracy: number | null;
 }
 
+export type PracticeTarget = "correct" | "incorrect" | "unanswered";
+
 export interface SessionRecord {
   schemaVersion: 1;
   id: string;
@@ -47,6 +49,7 @@ export interface SessionRecord {
     exams: string[] | null;
     order: "sequential" | "random";
     target: "all" | "unanswered" | "incorrect";
+    targets?: PracticeTarget[];
   };
   result: SessionResult;
   questions: {
