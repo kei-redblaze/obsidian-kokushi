@@ -1,5 +1,5 @@
 import { App, Modal, Notice } from "obsidian";
-import { SessionRecord } from "../types";
+import { HistoryRetryMode, SessionRecord } from "../types";
 import { formatSessionDate } from "./sessionFormatting";
 
 const GRADE_LABELS = {
@@ -12,7 +12,7 @@ export class SessionDetailsModal extends Modal {
   constructor(
     app: App,
     private record: SessionRecord,
-    private onRetry: (record: SessionRecord) => Promise<boolean>,
+    private onRetry: (record: SessionRecord, mode: HistoryRetryMode) => Promise<boolean>,
   ) {
     super(app);
   }
@@ -33,21 +33,28 @@ export class SessionDetailsModal extends Modal {
         `未採点${result.unanswered}問、採点除外${result.excluded}問、正答率 ${percentage}`,
     });
 
-    if (result.incorrect > 0) {
-      const retry = root.createEl("button", { text: "この回の誤答を再演習", cls: "mod-cta" });
-      retry.type = "button";
-      retry.onclick = async () => {
-        retry.disabled = true;
-        try {
-          if (await this.onRetry(this.record)) this.close();
-        } catch (error) {
-          console.error("[Kokushi] History retry error", error);
-          new Notice("演習画面を開けませんでした。");
-        } finally {
-          retry.disabled = false;
-        }
-      };
-    }
+    const actions = root.createDiv({ cls: "kokushi-history-actions" });
+    const retrySet = actions.createEl("button", { type: "button", text: "このセットで再演習", cls: "mod-cta" });
+    const retryIncorrect = result.incorrect > 0
+      ? actions.createEl("button", { type: "button", text: "この回の誤答を再演習" })
+      : null;
+
+    const retry = async (mode: HistoryRetryMode): Promise<void> => {
+      if (retrySet.disabled) return;
+      retrySet.disabled = true;
+      if (retryIncorrect) retryIncorrect.disabled = true;
+      try {
+        if (await this.onRetry(this.record, mode)) this.close();
+      } catch (error) {
+        console.error("[Kokushi] History retry error", error);
+        new Notice("演習画面を開けませんでした。");
+      } finally {
+        retrySet.disabled = false;
+        if (retryIncorrect) retryIncorrect.disabled = false;
+      }
+    };
+    retrySet.onclick = () => { void retry("all"); };
+    if (retryIncorrect) retryIncorrect.onclick = () => { void retry("incorrect"); };
 
     const wrapper = root.createDiv({ cls: "kokushi-session-table-wrapper" });
     const table = wrapper.createEl("table", { cls: "kokushi-session-table" });

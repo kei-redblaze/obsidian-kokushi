@@ -7,7 +7,7 @@ import {
 
 import { QuestionService } from "../services/QuestionService";
 import { SessionService } from "../services/SessionService";
-import { SessionRecord } from "../types";
+import { HistoryRetryMode, SessionRecord } from "../types";
 import { renderSessionHistory } from "./SessionHistory";
 import { renderAttemptHistory, renderInvalidAttempts } from "./AttemptHistory";
 import { DASHBOARD_HISTORY_LIMIT } from "../constants";
@@ -39,7 +39,7 @@ export class DashboardView extends ItemView {
     private onOpenQuestion: (
       id: string
     ) => Promise<void>,
-    private onRetrySession: (record: SessionRecord) => Promise<boolean>,
+    private onRetrySession: (record: SessionRecord, mode: HistoryRetryMode) => Promise<boolean>,
     private onResumeSession: (id: string) => Promise<void>
   ) {
     super(leaf);

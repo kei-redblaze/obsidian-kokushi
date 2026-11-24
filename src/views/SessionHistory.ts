@@ -1,7 +1,7 @@
 import { App, Notice } from "obsidian";
 import { DASHBOARD_HISTORY_LIMIT } from "../constants";
 import { SessionService, SessionSummary } from "../services/SessionService";
-import { SessionRecord } from "../types";
+import { HistoryRetryMode, SessionRecord } from "../types";
 import { SessionDetailsModal } from "./SessionDetailsModal";
 import { formatSessionDate } from "./sessionFormatting";
 
@@ -15,7 +15,7 @@ export async function renderSessionHistory(
   root: HTMLElement,
   app: App,
   service: SessionService,
-  onRetry: (record: SessionRecord) => Promise<boolean>,
+  onRetry: (record: SessionRecord, mode: HistoryRetryMode) => Promise<boolean>,
   onResume: (id: string) => Promise<void>,
   onShowAll?: () => void,
 ): Promise<void> {

@@ -12,6 +12,7 @@ import {
   GradeResult,
   SessionResult,
   SessionRecord,
+  HistoryRetryMode,
 } from "../types";
 
 import { QuestionService } from "../services/QuestionService";
@@ -22,6 +23,7 @@ import { SessionService } from "../services/SessionService";
 import { QUESTION_ID_PATTERN } from "../constants";
 import { renderDraftList } from "./DraftList";
 import { renderQuestionStudy } from "./QuestionStudyPanel";
+import { arrangeQuestionImages, copyQuestionText, formatQuestionCopy } from "./questionMedia";
 
 export const VIEW_TYPE_KOKUSHI = "kokushi-quiz";
 
@@ -86,6 +88,7 @@ export class QuizView extends ItemView {
   private draftErrorShown = false;
   private pendingOperation: Promise<void> | null = null;
   private closing = false;
+  private stopWatchingImages: (() => void) | null = null;
 
   // ========================================
   // セッション内の解答状態
@@ -142,6 +145,8 @@ export class QuizView extends ItemView {
 
   async onClose(): Promise<void> {
     this.closing = true;
+    this.stopWatchingImages?.();
+    this.stopWatchingImages = null;
     await this.pendingOperation?.catch(() => {});
     if (!await this.flushDraft() && this.draftDirty) await this.flushDraft();
     this.allQuestions = [];
@@ -212,6 +217,8 @@ export class QuizView extends ItemView {
   private async renderScopeSelection(): Promise<void> {
     const root = this.contentEl;
 
+    this.stopWatchingImages?.();
+    this.stopWatchingImages = null;
     root.empty();
     this.resetScroll();
 
@@ -1208,6 +1215,8 @@ export class QuizView extends ItemView {
     resetScroll = true
   ): Promise<void> {
     const container = this.contentEl;
+    this.stopWatchingImages?.();
+    this.stopWatchingImages = null;
 
     // スクロール位置を保持する再描画に備える
     const previousScroll = container.scrollTop;
@@ -1247,7 +1256,11 @@ export class QuizView extends ItemView {
     progress.createEl("strong", { text: question.id });
     progress.createSpan({ text: ` (${this.index + 1} / ${this.questions.length})` });
 
-    const backButton = header.createEl("button", {
+    const headerActions = header.createDiv({ cls: "kokushi-header-actions" });
+    const copyButton = headerActions.createEl("button", { type: "button", text: "コピー" });
+    copyButton.disabled = true;
+
+    const backButton = headerActions.createEl("button", {
       text: "戻る",
       attr: { "aria-label": "出題範囲に戻る" },
     });
@@ -1286,6 +1299,7 @@ export class QuizView extends ItemView {
         this
       );
 
+      if (this.closing || !container.contains(questionEl)) return;
       questionEl.querySelectorAll("table").forEach(table => {
         const parent = table.parentElement;
         const wrapper = parent?.classList.contains("table-wrapper") ? parent : questionEl.createDiv();
@@ -1298,6 +1312,7 @@ export class QuizView extends ItemView {
           wrapper.appendChild(table);
         }
       });
+      this.stopWatchingImages = arrangeQuestionImages(questionEl);
     } else {
       questionEl.createEl("p", {
         text: "問題文が見つかりません。",
@@ -1340,6 +1355,12 @@ export class QuizView extends ItemView {
         updateSubmit
       );
     }
+
+    if (this.closing || !container.contains(answerEl)) return;
+    copyButton.disabled = false;
+    copyButton.onclick = () => {
+      void copyQuestionText(container.ownerDocument, formatQuestionCopy(question.id, questionEl, answerEl));
+    };
 
     // ========================================
     // 「わからない」ボタン
@@ -2329,7 +2350,7 @@ export class QuizView extends ItemView {
     await this.renderQuiz(true);
   }
 
-  public async startFromHistory(record: SessionRecord): Promise<boolean> {
+  public async startFromHistory(record: SessionRecord, mode: HistoryRetryMode = "incorrect"): Promise<boolean> {
     if (!await this.leaveSession()) return false;
 
     this.saving = true;
@@ -2338,19 +2359,27 @@ export class QuizView extends ItemView {
       if (this.closing) return false;
 
       const byId = new Map(allQuestions.map(question => [question.id, question]));
-      const incorrect = record.questions.filter(question => question.grade === "incorrect");
-      const questions = incorrect.flatMap(item => {
+      const requested = mode === "all"
+        ? record.questions
+        : record.questions.filter(question => question.grade === "incorrect");
+      const questions = requested.flatMap(item => {
         const question = byId.get(item.id);
         return question ? [question] : [];
       });
 
-      if (questions.length === 0) {
-        new Notice("再演習できる誤答問題がありません。");
+      const missing = requested.length - questions.length;
+      if (mode === "all" && missing > 0) {
+        new Notice(`${missing}問が見つからないため、このセットの再演習を開始できません。`);
         return false;
       }
 
-      if (questions.length < incorrect.length) {
-        new Notice(`${incorrect.length - questions.length}問が見つからないため、読み込めた問題で再演習します。`);
+      if (questions.length === 0) {
+        new Notice("再演習できる問題がありません。");
+        return false;
+      }
+
+      if (missing > 0) {
+        new Notice(`${missing}問が見つからないため、読み込めた問題で再演習します。`);
       }
 
       this.allQuestions = allQuestions;
@@ -2358,7 +2387,7 @@ export class QuizView extends ItemView {
       this.quizScope = {
         exams: null,
         order: "sequential",
-        target: "incorrect",
+        target: mode,
         countMode: "all",
         customCount: "25",
       };
@@ -2367,7 +2396,7 @@ export class QuizView extends ItemView {
       return true;
     } catch (error) {
       console.error("[Kokushi] History retry error", error);
-      new Notice("誤答問題を読み込めませんでした。");
+      new Notice("再演習する問題を読み込めませんでした。");
       return false;
     } finally {
       this.saving = false;
