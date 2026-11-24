@@ -1,5 +1,5 @@
 
-import { Plugin } from "obsidian";
+import { Notice, Plugin } from "obsidian";
 
 import {
   QuizView,
@@ -7,6 +7,7 @@ import {
 } from "./views/QuizView";
 
 import { QuestionService } from "./services/QuestionService";
+import { QuestionStudyService } from "./services/QuestionStudyService";
 import { AttemptService } from "./services/AttemptService";
 import { SessionService } from "./services/SessionService";
 
@@ -27,6 +28,15 @@ export default class KokushiPlugin extends Plugin {
     const attemptService =
       new AttemptService(this.app);
     const sessionService = new SessionService(this.app.vault);
+    const studyService = new QuestionStudyService(this.app);
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+      void studyService.trackRename(file, oldPath).then(failed => {
+        if (failed > 0) new Notice(`${failed}件の問題で関連ノートのパスを更新できませんでした。`);
+      }).catch(error => {
+        console.error("[Kokushi] Related note rename error", error);
+        new Notice("関連ノートのパスを更新できませんでした。");
+      });
+    }));
 
     this.registerView(
       VIEW_TYPE_KOKUSHI,
@@ -34,7 +44,8 @@ export default class KokushiPlugin extends Plugin {
         leaf,
         questionService,
         attemptService,
-        sessionService
+        sessionService,
+        studyService
       )
     );
 

@@ -15,11 +15,13 @@ import {
 } from "../types";
 
 import { QuestionService } from "../services/QuestionService";
+import { QuestionStudyService } from "../services/QuestionStudyService";
 import { GradingService } from "../services/GradingService";
 import { AttemptService } from "../services/AttemptService";
 import { SessionService } from "../services/SessionService";
 import { QUESTION_ID_PATTERN } from "../constants";
 import { renderDraftList } from "./DraftList";
+import { renderQuestionStudy } from "./QuestionStudyPanel";
 
 export const VIEW_TYPE_KOKUSHI = "kokushi-quiz";
 
@@ -111,7 +113,8 @@ export class QuizView extends ItemView {
     leaf: WorkspaceLeaf,
     private questionService: QuestionService,
     private attemptService: AttemptService,
-    private sessionService: SessionService
+    private sessionService: SessionService,
+    private studyService: QuestionStudyService
   ) {
     super(leaf);
   }
@@ -1282,6 +1285,19 @@ export class QuizView extends ItemView {
         question.path,
         this
       );
+
+      questionEl.querySelectorAll("table").forEach(table => {
+        const parent = table.parentElement;
+        const wrapper = parent?.classList.contains("table-wrapper") ? parent : questionEl.createDiv();
+        wrapper.addClass("kokushi-question-table");
+        wrapper.tabIndex = 0;
+        wrapper.setAttribute("role", "region");
+        wrapper.setAttribute("aria-label", "問題文の表");
+        if (wrapper !== parent) {
+          table.before(wrapper);
+          wrapper.appendChild(table);
+        }
+      });
     } else {
       questionEl.createEl("p", {
         text: "問題文が見つかりません。",
@@ -1382,7 +1398,7 @@ export class QuizView extends ItemView {
         "button",
         {
           text: "解答・採点",
-          cls: "mod-cta kokushi-submit",
+          cls: "mod-cta kokushi-wide-action kokushi-submit",
         }
       );
 
@@ -1412,7 +1428,7 @@ export class QuizView extends ItemView {
     // 前後移動・結果画面ボタン
     // ========================================
 
-    this.renderNavigation(container, submitButton);
+    this.renderNavigation(container);
 
     // ========================================
     // 描画完了後のスクロール位置調整
@@ -1702,6 +1718,7 @@ export class QuizView extends ItemView {
 
     resultEl.createEl("h3", {
       text: labels[this.graded],
+      cls: `kokushi-result-grade is-${this.graded}`,
     });
 
     if (this.unknown) {
@@ -1710,28 +1727,21 @@ export class QuizView extends ItemView {
       });
     }
 
-    if (question.excluded) {
-      resultEl.createEl("p", {
-        text: "この問題は採点対象外です。",
-      });
-
-      return;
-    }
-
     resultEl.createEl("p", {
-      text:
-        `正答：${this.formatCorrectAnswer(question)}`,
+      text: question.excluded
+        ? "この問題は採点対象外です。"
+        : `正答：${this.formatCorrectAnswer(question)}`,
     });
+
+    const studyPanel = resultEl.createDiv({ cls: "kokushi-question-study" });
+    void renderQuestionStudy(studyPanel, this.app, question, this.studyService);
   }
 
   // ========================================
   // 問題間ナビゲーション
   // ========================================
 
-  private renderNavigation(
-    container: HTMLElement,
-    submitButton: HTMLButtonElement | null
-  ): void {
+  private renderNavigation(container: HTMLElement): void {
     const nav = container.createDiv({
       cls: "kokushi-navigation",
     });
@@ -1763,10 +1773,7 @@ export class QuizView extends ItemView {
     const isLast =
       this.index + 1 >= this.questions.length;
 
-    const forward = nav.createDiv({ cls: "kokushi-navigation-forward" });
-    if (submitButton) forward.appendChild(submitButton);
-
-    const nextButton = forward.createEl(
+    const nextButton = nav.createEl(
       "button",
       {
         text: isLast
@@ -1799,7 +1806,7 @@ export class QuizView extends ItemView {
     const resultButton =
       container.createEl("button", {
         text: "演習結果を見る",
-        cls: "kokushi-view-results",
+        cls: "kokushi-wide-action kokushi-view-results",
       });
 
     resultButton.disabled = this.saving;

@@ -37,6 +37,24 @@ If your plugin does not need CSS, delete this file.
   margin-bottom: 24px;
 }
 
+.kokushi-question-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.kokushi-question .kokushi-question-table table {
+  display: table;
+  border-collapse: collapse;
+  width: max-content;
+  min-width: min(100%, 24rem);
+  max-width: none;
+}
+
+.kokushi-question .kokushi-question-table th,
+.kokushi-question .kokushi-question-table td {
+  border: 1px solid var(--background-modifier-border, currentColor);
+}
+
 .kokushi-answer {
   margin-bottom: 20px;
 }
@@ -92,6 +110,54 @@ If your plugin does not need CSS, delete this file.
   padding: 16px;
   border-radius: 8px;
   background: var(--background-secondary);
+}
+
+.kokushi-result-grade.is-correct {
+  color: var(--color-green, #237a3b);
+}
+
+.kokushi-result-grade.is-incorrect {
+  color: var(--color-red, #bc3232);
+}
+
+.kokushi-question-study {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.kokushi-study-memo {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.kokushi-study-field {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 6px;
+}
+
+.kokushi-study-field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.kokushi-study-status:not(:empty),
+.kokushi-study-error:not(:empty) {
+  margin-top: 8px;
+}
+
+.kokushi-study-error {
+  color: var(--text-error, #bc3232);
+}
+
+.kokushi-study-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* ========================================
@@ -419,12 +485,6 @@ If your plugin does not need CSS, delete this file.
   margin-top: 24px;
 }
 
-.kokushi-navigation-forward {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
 .kokushi-navigation button {
   width: 100%;
   min-width: 0;
@@ -625,9 +685,10 @@ If your plugin does not need CSS, delete this file.
   margin-top: 20px;
 }
 
-.kokushi-view-results {
+.kokushi-wide-action {
   display: block;
   width: 100%;
+  min-height: 44px;
   margin: 14px 0;
 }
 
