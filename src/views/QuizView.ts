@@ -8,15 +8,16 @@ import {
 
 import {
   Question,
-  Attempt,
   GradeResult,
   SessionResult,
   SessionRecord,
   HistoryRetryMode,
+  PracticeTarget,
 } from "../types";
 
 import { QuestionService } from "../services/QuestionService";
 import { QuestionStudyService } from "../services/QuestionStudyService";
+import { ALL_PRACTICE_TARGETS, latestAttemptResults, practiceTarget, savedPracticeTargets } from "../services/PracticeTargets";
 import { GradingService } from "../services/GradingService";
 import { AttemptService } from "../services/AttemptService";
 import { SessionService } from "../services/SessionService";
@@ -38,17 +39,12 @@ type Option = {
 
 type OrderMode = "sequential" | "random";
 
-type TargetMode =
-  | "all"
-  | "unanswered"
-  | "incorrect";
-
 type CountMode = "all" | "ten" | "custom";
 
 type QuizScope = {
   exams: string[] | null;
   order: OrderMode;
-  target: TargetMode;
+  targets: PracticeTarget[];
   countMode: CountMode;
   customCount: string;
 };
@@ -88,6 +84,7 @@ export class QuizView extends ItemView {
   private draftErrorShown = false;
   private pendingOperation: Promise<void> | null = null;
   private closing = false;
+  private memoEditor: Promise<(() => Promise<boolean>) | undefined> | null = null;
   private stopWatchingImages: (() => void) | null = null;
 
   // ========================================
@@ -107,7 +104,7 @@ export class QuizView extends ItemView {
   private quizScope: QuizScope = {
     exams: null,
     order: "sequential",
-    target: "all",
+    targets: [...ALL_PRACTICE_TARGETS],
     countMode: "all",
     customCount: "25",
   };
@@ -117,7 +114,8 @@ export class QuizView extends ItemView {
     private questionService: QuestionService,
     private attemptService: AttemptService,
     private sessionService: SessionService,
-    private studyService: QuestionStudyService
+    private studyService: QuestionStudyService,
+    private openDashboard: () => Promise<void>
   ) {
     super(leaf);
   }
@@ -148,6 +146,10 @@ export class QuizView extends ItemView {
     this.stopWatchingImages?.();
     this.stopWatchingImages = null;
     await this.pendingOperation?.catch(() => {});
+    if (!await this.flushMemo() && !await this.flushMemo()) {
+      new Notice("メモを保存できませんでした。");
+    }
+    this.memoEditor = null;
     if (!await this.flushDraft() && this.draftDirty) await this.flushDraft();
     this.allQuestions = [];
     this.questions = [];
@@ -216,6 +218,7 @@ export class QuizView extends ItemView {
 
   private async renderScopeSelection(): Promise<void> {
     const root = this.contentEl;
+    this.memoEditor = null;
 
     this.stopWatchingImages?.();
     this.stopWatchingImages = null;
@@ -228,10 +231,10 @@ export class QuizView extends ItemView {
     void renderDraftList(root.createDiv(), this.sessionService, id => this.resumeDraft(id));
 
     const loading = root.createEl("p", { text: "解答履歴を読み込んでいます..." });
-    let attempts: Attempt[];
+    let latestResults: Map<string, boolean | null>;
 
     try {
-      attempts = await this.attemptService.getAttempts();
+      latestResults = latestAttemptResults(await this.attemptService.getAttempts());
     } catch (error) {
       console.error("[Kokushi] History load error", error);
       loading.setText("解答履歴を読み込めませんでした。");
@@ -241,20 +244,6 @@ export class QuizView extends ItemView {
 
     if (this.closing || this.session) return;
     loading.remove();
-
-    // ----------------------------------------
-    // 最新解答結果
-    // ----------------------------------------
-
-    const latestResults =
-      new Map<string, boolean | null>();
-
-    for (const attempt of attempts) {
-      latestResults.set(
-        attempt.id,
-        attempt.correct
-      );
-    }
 
     // ========================================
     // 利用可能な出典
@@ -297,27 +286,7 @@ export class QuizView extends ItemView {
           return false;
         }
 
-        // 未回答のみ
-        if (
-          this.quizScope.target === "unanswered"
-        ) {
-          return !latestResults.has(
-            question.id
-          );
-        }
-
-        // 最新解答が誤答
-        if (
-          this.quizScope.target === "incorrect"
-        ) {
-          return (
-            latestResults.get(
-              question.id
-            ) === false
-          );
-        }
-
-        return true;
+        return this.quizScope.targets.includes(practiceTarget(question, latestResults.get(question.id)));
       });
     };
 
@@ -634,33 +603,34 @@ export class QuizView extends ItemView {
     // 出題対象
     // ========================================
 
-    createButtons(
-      createGroup("出題対象"),
-      [
-        {
-          value: "all",
-          label: "全問題",
-        },
-        {
-          value: "unanswered",
-          label: "未回答のみ",
-        },
-        {
-          value: "incorrect",
-          label: "誤答のみ",
-        },
-      ],
-      () => this.quizScope.target,
-      value => {
-        if (
-          value === "all" ||
-          value === "unanswered" ||
-          value === "incorrect"
-        ) {
-          this.quizScope.target = value;
-        }
-      }
-    );
+    const targetGroup = createGroup("出題対象").createDiv({ cls: "kokushi-scope-buttons" });
+    const targetLabels: Record<PracticeTarget, string> = {
+      correct: "正解",
+      incorrect: "不正解",
+      unanswered: "未解答",
+    };
+
+    for (const target of ALL_PRACTICE_TARGETS) {
+      const button = targetGroup.createEl("button", {
+        type: "button",
+        text: targetLabels[target],
+        cls: "kokushi-scope-button",
+      });
+      const sync = (): void => {
+        const selected = this.quizScope.targets.includes(target);
+        button.classList.toggle("is-selected", selected);
+        button.setAttribute("aria-pressed", String(selected));
+      };
+      sync();
+      button.onclick = () => {
+        const selected = this.quizScope.targets.includes(target);
+        this.quizScope.targets = selected
+          ? this.quizScope.targets.filter(item => item !== target)
+          : [...this.quizScope.targets, target];
+        sync();
+        updateCount();
+      };
+    }
 
     // ========================================
     // 出題問題数
@@ -726,6 +696,17 @@ export class QuizView extends ItemView {
     // プレビューと開始ボタンを末尾へ
     root.appendChild(preview);
     root.appendChild(startButton);
+    const dashboard = root.createEl("button", {
+      type: "button",
+      text: "ダッシュボードを見る",
+      cls: "kokushi-scope-dashboard",
+    });
+    dashboard.onclick = () => {
+      void this.openDashboard().catch(error => {
+        console.error("[Kokushi] Open dashboard error", error);
+        new Notice("ダッシュボードを開けませんでした。");
+      });
+    };
 
     // ========================================
     // 演習開始
@@ -809,7 +790,9 @@ export class QuizView extends ItemView {
     this.resetSession();
     if (this.questions.length === 0) return;
 
-    const { exams, order, target } = this.quizScope;
+    const { exams, order, targets } = this.quizScope;
+    const only = targets.length === 1 ? targets[0] : undefined;
+    const target = only === "incorrect" || only === "unanswered" ? only : "all";
     const startedAt = new Date().toISOString();
     const suffix = Array.from(crypto.getRandomValues(new Uint32Array(2)))
       .map(value => value.toString(16).padStart(8, "0"))
@@ -818,7 +801,7 @@ export class QuizView extends ItemView {
     this.session = {
       id: `${startedAt.replace(/:/g, "-")}_${suffix}`,
       startedAt,
-      scope: { exams: exams === null ? null : [...exams], order, target },
+      scope: { exams: exams === null ? null : [...exams], order, target, targets: [...targets] },
       sourceSessionId,
     };
     this.sessionService.claimDraft(this.session.id);
@@ -896,11 +879,16 @@ export class QuizView extends ItemView {
     return this.draftWrite;
   }
 
+  private async flushMemo(): Promise<boolean> {
+    const flush = await this.memoEditor;
+    return flush ? flush() : true;
+  }
+
   private async leaveSession(): Promise<boolean> {
     if (this.saving || this.closing) return false;
     this.saving = true;
     try {
-      return await this.flushDraft() && !this.closing;
+      return await this.flushMemo() && await this.flushDraft() && !this.closing;
     } finally {
       this.saving = false;
     }
@@ -942,7 +930,7 @@ export class QuizView extends ItemView {
       const { startedAt, scope, sourceSessionId } = record;
       this.session = { id, startedAt, scope, sourceSessionId };
       adopted = true;
-      this.quizScope = { ...this.quizScope, ...scope };
+      this.quizScope = { ...this.quizScope, exams: scope.exams, order: scope.order, targets: savedPracticeTargets(scope) };
       this.allQuestions = allQuestions;
       this.questions = questions;
       record.questions.forEach((item, index) => {
@@ -1004,13 +992,20 @@ export class QuizView extends ItemView {
   private async moveToQuestion(
     newIndex: number
   ): Promise<void> {
-    if (this.saving) return;
+    if (this.saving || this.closing) return;
 
     if (
       newIndex < 0 ||
       newIndex >= this.questions.length
     ) {
       return;
+    }
+
+    this.saving = true;
+    try {
+      if (!await this.flushMemo() || this.closing) return;
+    } finally {
+      this.saving = false;
     }
 
     // 未採点の解答を保持してから問題を移動する。
@@ -1033,11 +1028,12 @@ export class QuizView extends ItemView {
     const session = this.session;
     if (this.saving || this.closing || !session) return;
 
-    this.saveCurrentState();
-    this.cancelDraftTimer();
     this.saving = true;
 
     try {
+      if (!await this.flushMemo() || this.session !== session || this.closing) return;
+      this.saveCurrentState();
+      this.cancelDraftTimer();
       const write = this.sessionService.save(this.createSessionRecord(session, "completed"));
       this.pendingOperation = write;
       await write;
@@ -1215,6 +1211,7 @@ export class QuizView extends ItemView {
     resetScroll = true
   ): Promise<void> {
     const container = this.contentEl;
+    this.memoEditor = null;
     this.stopWatchingImages?.();
     this.stopWatchingImages = null;
 
@@ -1755,7 +1752,7 @@ export class QuizView extends ItemView {
     });
 
     const studyPanel = resultEl.createDiv({ cls: "kokushi-question-study" });
-    void renderQuestionStudy(studyPanel, this.app, question, this.studyService);
+    this.memoEditor = renderQuestionStudy(studyPanel, this.app, question, this.studyService);
   }
 
   // ========================================
@@ -2269,42 +2266,20 @@ export class QuizView extends ItemView {
     await this.loadQuestions();
     if (this.closing) return;
 
-    const attempts =
-      await this.attemptService.getAttempts();
+    const latestResults = latestAttemptResults(await this.attemptService.getAttempts());
     if (this.closing) return;
-
-    const latestResults =
-      new Map<string, boolean | null>();
-
-    for (const attempt of attempts) {
-      latestResults.set(
-        attempt.id,
-        attempt.correct
-      );
-    }
 
     this.quizScope = {
       exams: null,
       order: "sequential",
-      target,
+      targets: [target],
       countMode: "all",
       customCount: "25",
     };
 
-    this.questions =
-      this.allQuestions.filter(question => {
-        if (target === "unanswered") {
-          return !latestResults.has(
-            question.id
-          );
-        }
-
-        return (
-          latestResults.get(
-            question.id
-          ) === false
-        );
-      });
+    this.questions = this.allQuestions.filter(question =>
+      practiceTarget(question, latestResults.get(question.id)) === target
+    );
 
     this.startSession();
 
@@ -2338,7 +2313,7 @@ export class QuizView extends ItemView {
     this.quizScope = {
       exams: null,
       order: "sequential",
-      target: "all",
+      targets: [...ALL_PRACTICE_TARGETS],
       countMode: "all",
       customCount: "25",
     };
@@ -2387,7 +2362,7 @@ export class QuizView extends ItemView {
       this.quizScope = {
         exams: null,
         order: "sequential",
-        target: mode,
+        targets: mode === "all" ? [...ALL_PRACTICE_TARGETS] : [mode],
         countMode: "all",
         customCount: "25",
       };

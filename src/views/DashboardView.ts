@@ -61,12 +61,12 @@ export class DashboardView extends ItemView {
     this.registerEvent(this.app.workspace.on("active-leaf-change", leaf => {
       if (leaf !== this.leaf) return;
       if (this.page === "dashboard") {
-        void this.refresh();
+        void this.showOverview();
       } else {
         void this.openHistory(this.page);
       }
     }));
-    await this.refresh();
+    await this.showOverview();
   }
 
   async onClose(): Promise<void> {
@@ -78,7 +78,7 @@ export class DashboardView extends ItemView {
   // データの再読み込み
   // ========================================
 
-  private async refresh(): Promise<void> {
+  public async showOverview(): Promise<void> {
     this.page = "dashboard";
     const version = ++this.renderVersion;
     this.contentEl.empty();
@@ -148,7 +148,7 @@ export class DashboardView extends ItemView {
     );
 
     refreshButton.onclick = () => {
-      void this.refresh();
+      void this.showOverview();
     };
 
     renderInvalidAttempts(root, stats.invalidLines);
@@ -366,7 +366,7 @@ export class DashboardView extends ItemView {
     heading.focus();
     const back = root.createEl("button", { text: "ダッシュボードに戻る" });
     back.type = "button";
-    back.onclick = () => { void this.refresh(); };
+    back.onclick = () => { void this.showOverview(); };
 
     const content = root.createDiv({ cls: "kokushi-history-page" });
     if (kind === "sessions") {
