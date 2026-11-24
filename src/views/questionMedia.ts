@@ -49,20 +49,23 @@ function groupImages(parent: HTMLElement): void {
       continue;
     }
     if (!groupStandalone) {
-      if (run.length > 1) groups.push(run);
+      if (run.length > 0) groups.push(run);
       run = [];
     }
 
     if (element) groupImages(element);
   }
-  if (run.length > 1) groups.push(run);
+  if (run.length > 0) groups.push(run);
 
   for (const group of groups) {
-    const gallery = group.find(item => item.matches(GALLERY)) ??
-      parent.createEl(parent.matches("p, span, a") ? "span" : "div", {
-        cls: "kokushi-image-gallery",
-        attr: { tabindex: "0", role: "region", "aria-label": "問題文の画像" },
-      });
+    const existing = group.find(item => item.matches(GALLERY));
+    if (group.length === 1 && existing) continue;
+
+    const inline = parent.matches("p, span, a");
+    const gallery = existing ?? parent.createEl(inline ? "span" : "div", {
+      cls: inline ? "kokushi-image-gallery kokushi-image-gallery-inline" : "kokushi-image-gallery",
+      attr: { tabindex: "0", role: "region", "aria-label": "問題文の画像" },
+    });
 
     const first = group[0];
     if (first && first !== gallery) first.before(gallery);
@@ -72,13 +75,6 @@ function groupImages(parent: HTMLElement): void {
     gallery.append(...contents);
     group.filter(image => image !== gallery && image.matches(GALLERY)).forEach(image => image.remove());
   }
-
-  // 画像が1段落に収まっている場合も、段落内の画像の並びを整える。
-  Array.from(parent.children).forEach(child => {
-    if (child.instanceOf(HTMLElement) && !child.matches(GALLERY) && isImageBlock(child)) {
-      if (!child.matches(IMAGE)) groupImages(child);
-    }
-  });
 }
 
 function isImageBlock(element: HTMLElement): boolean {
