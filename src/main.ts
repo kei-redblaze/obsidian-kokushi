@@ -119,9 +119,9 @@ export default class KokushiPlugin extends Plugin {
           await quiz.openQuestionFromDashboard(id);
         },
 
-        async record => {
+        async (record, mode) => {
           const quiz = await getQuizView();
-          return quiz.startFromHistory(record);
+          return quiz.startFromHistory(record, mode);
         },
 
         async id => {
