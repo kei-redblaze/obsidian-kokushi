@@ -896,8 +896,8 @@ export class QuizView extends ItemView {
     }
   }
 
-  private async resumeDraft(id: string): Promise<void> {
-    if (this.saving || this.closing || this.session) return;
+  public async resumeDraft(id: string): Promise<void> {
+    if (this.session?.id === id || !await this.leaveSession()) return;
 
     if (!this.sessionService.claimDraft(id)) {
       new Notice("この演習は別のペインで開いています。");
@@ -914,7 +914,10 @@ export class QuizView extends ItemView {
         return;
       }
 
-      const available = new Map(this.allQuestions.map(question => [question.id, question]));
+      const allQuestions = await this.questionService.getQuestions();
+      if (this.closing) return;
+
+      const available = new Map(allQuestions.map(question => [question.id, question]));
       const questions: Question[] = [];
       for (const item of record.questions) {
         const question = available.get(item.id);
@@ -930,6 +933,7 @@ export class QuizView extends ItemView {
       this.session = { id, startedAt, scope, sourceSessionId };
       adopted = true;
       this.quizScope = { ...this.quizScope, ...scope };
+      this.allQuestions = allQuestions;
       this.questions = questions;
       record.questions.forEach((item, index) => {
         this.questionStates.set(index, {
@@ -1236,20 +1240,15 @@ export class QuizView extends ItemView {
       cls: "kokushi-header",
     });
 
-    header.createEl("p", {
-      text:
-        `${question.id} ` +
-        `(${this.index + 1} / ${this.questions.length})`,
+    const progress = header.createEl("p", { cls: "kokushi-question-progress" });
+    progress.createEl("strong", { text: question.id });
+    progress.createSpan({ text: ` (${this.index + 1} / ${this.questions.length})` });
+
+    const backButton = header.createEl("button", {
+      text: "戻る",
+      attr: { "aria-label": "出題範囲に戻る" },
     });
-
-    // ----------------------------------------
-    // 出題範囲選択画面へ
-    // ----------------------------------------
-
-    const backButton =
-      header.createEl("button", {
-        text: this.sessionCompleted ? "範囲選択に戻る" : "中断して範囲選択に戻る",
-      });
+    backButton.type = "button";
 
     backButton.disabled = this.saving;
 
@@ -1413,7 +1412,7 @@ export class QuizView extends ItemView {
     // 前後移動・結果画面ボタン
     // ========================================
 
-    this.renderNavigation(container);
+    this.renderNavigation(container, submitButton);
 
     // ========================================
     // 描画完了後のスクロール位置調整
@@ -1501,11 +1500,8 @@ export class QuizView extends ItemView {
         cls: "kokushi-option-text",
       });
 
-      textEl.createSpan().setText(
-        `${option.id}. `
-      );
-
-      const markdownEl = textEl.createDiv();
+      textEl.createSpan({ text: `${option.id}.`, cls: "kokushi-option-letter" });
+      const markdownEl = textEl.createDiv({ cls: "kokushi-option-markdown" });
 
       await MarkdownRenderer.render(
         this.app,
@@ -1733,7 +1729,8 @@ export class QuizView extends ItemView {
   // ========================================
 
   private renderNavigation(
-    container: HTMLElement
+    container: HTMLElement,
+    submitButton: HTMLButtonElement | null
   ): void {
     const nav = container.createDiv({
       cls: "kokushi-navigation",
@@ -1766,7 +1763,10 @@ export class QuizView extends ItemView {
     const isLast =
       this.index + 1 >= this.questions.length;
 
-    const nextButton = nav.createEl(
+    const forward = nav.createDiv({ cls: "kokushi-navigation-forward" });
+    if (submitButton) forward.appendChild(submitButton);
+
+    const nextButton = forward.createEl(
       "button",
       {
         text: isLast

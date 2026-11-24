@@ -9,6 +9,8 @@ import { QuestionService } from "../services/QuestionService";
 import { SessionService } from "../services/SessionService";
 import { SessionRecord } from "../types";
 import { renderSessionHistory } from "./SessionHistory";
+import { renderAttemptHistory, renderInvalidAttempts } from "./AttemptHistory";
+import { DASHBOARD_HISTORY_LIMIT } from "../constants";
 import {
   StatisticsService,
   DashboardStatistics,
@@ -22,6 +24,8 @@ export type DashboardTarget =
   "unanswered" | "incorrect";
 
 export class DashboardView extends ItemView {
+  private renderVersion = 0;
+  private page: "dashboard" | "sessions" | "attempts" = "dashboard";
   private period: "7" | "30" | "all" = "30";
 
   constructor(
@@ -35,7 +39,8 @@ export class DashboardView extends ItemView {
     private onOpenQuestion: (
       id: string
     ) => Promise<void>,
-    private onRetrySession: (record: SessionRecord) => Promise<boolean>
+    private onRetrySession: (record: SessionRecord) => Promise<boolean>,
+    private onResumeSession: (id: string) => Promise<void>
   ) {
     super(leaf);
   }
@@ -45,7 +50,7 @@ export class DashboardView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "国試ダッシュボード";
+    return "ダッシュボード";
   }
 
   getIcon(): string {
@@ -53,10 +58,19 @@ export class DashboardView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
+    this.registerEvent(this.app.workspace.on("active-leaf-change", leaf => {
+      if (leaf !== this.leaf) return;
+      if (this.page === "dashboard") {
+        void this.refresh();
+      } else {
+        void this.openHistory(this.page);
+      }
+    }));
     await this.refresh();
   }
 
   async onClose(): Promise<void> {
+    this.renderVersion++;
     this.contentEl.empty();
   }
 
@@ -65,7 +79,10 @@ export class DashboardView extends ItemView {
   // ========================================
 
   private async refresh(): Promise<void> {
+    this.page = "dashboard";
+    const version = ++this.renderVersion;
     this.contentEl.empty();
+    this.contentEl.scrollTop = 0;
     this.contentEl.createEl("p", {
       text: "学習統計を集計しています...",
     });
@@ -79,8 +96,9 @@ export class DashboardView extends ItemView {
           questions.map(question => question.id)
         );
 
-      this.renderDashboard(stats);
+      if (version === this.renderVersion) this.renderDashboard(stats);
     } catch (error) {
+      if (version !== this.renderVersion) return;
       console.error(
         "[Kokushi] Dashboard error",
         error
@@ -117,7 +135,7 @@ export class DashboardView extends ItemView {
     root.addClass("kokushi-dashboard");
 
     root.createEl("h2", {
-      text: "国試学習ダッシュボード",
+      text: "ダッシュボード",
     });
 
     const actions = root.createDiv({
@@ -133,15 +151,7 @@ export class DashboardView extends ItemView {
       void this.refresh();
     };
 
-    if (stats.invalidLines > 0) {
-      root.createEl("p", {
-        cls: "kokushi-dashboard-warning",
-        text:
-          `解答履歴に不正な行が` +
-          `${stats.invalidLines}件あります。` +
-          `これらを除いて集計しました。`,
-      });
-    }
+    renderInvalidAttempts(root, stats.invalidLines);
 
     root.createEl("p", {
       text:
@@ -322,88 +332,65 @@ export class DashboardView extends ItemView {
     );
 
     updateCharts();
-    void renderSessionHistory(root.createDiv(), this.app, this.sessionService, this.onRetrySession);
 
-    // ----------------------------------------
-    // 最近の解答履歴
-    // ----------------------------------------
+    const sessionSection = root.createDiv();
+    sessionSection.createEl("h3", { text: "演習履歴" });
+    void renderSessionHistory(
+      sessionSection, this.app, this.sessionService, this.onRetrySession, this.onResumeSession,
+      () => { void this.openHistory("sessions"); },
+    );
 
-    root.createEl("h3", {
-      text: "最近の解答履歴",
-    });
-
-    if (stats.recent.length === 0) {
-      root.createEl("p", {
-        text: "解答履歴はまだありません。",
+    const attemptSection = root.createDiv();
+    attemptSection.createEl("h3", { text: "最近の解答履歴" });
+    renderAttemptHistory(attemptSection, stats.recent, stats.availableIds, this.onOpenQuestion);
+    if (stats.totalAttempts > DASHBOARD_HISTORY_LIMIT) {
+      const more = attemptSection.createEl("button", {
+        text: "すべて表示",
+        attr: { "aria-label": "解答履歴をすべて表示" },
       });
+      more.type = "button";
+      more.onclick = () => { void this.openHistory("attempts"); };
+    }
+  }
+
+  private async openHistory(kind: "sessions" | "attempts"): Promise<void> {
+    this.page = kind;
+    const version = ++this.renderVersion;
+    const root = this.contentEl;
+    root.empty();
+    root.scrollTop = 0;
+    const heading = root.createEl("h2", {
+      text: kind === "sessions" ? "演習履歴" : "解答履歴",
+      attr: { tabindex: "-1" },
+    });
+    heading.focus();
+    const back = root.createEl("button", { text: "ダッシュボードに戻る" });
+    back.type = "button";
+    back.onclick = () => { void this.refresh(); };
+
+    const content = root.createDiv({ cls: "kokushi-history-page" });
+    if (kind === "sessions") {
+      await renderSessionHistory(content, this.app, this.sessionService, this.onRetrySession, this.onResumeSession);
       return;
     }
 
-    const table = root.createEl("table", {
-      cls: "kokushi-dashboard-history",
-    });
-
-    const head = table.createEl("thead");
-    const headRow = head.createEl("tr");
-
-    for (const title of [
-      "問題",
-      "日時",
-      "解答",
-      "判定",
-    ]) {
-      headRow.createEl("th", {
-        text: title,
-      });
-    }
-
-    const body = table.createEl("tbody");
-
-    for (const attempt of stats.recent) {
-      const row = body.createEl("tr");
-
-      const idCell = row.createEl("td");
-
-      if (stats.availableIds.has(attempt.id)) {
-        const button = idCell.createEl(
-          "button",
-          {
-            text: attempt.id,
-            cls: "kokushi-dashboard-link",
-          }
-        );
-
-        button.onclick = () => {
-          void this.onOpenQuestion(attempt.id);
-        };
-      } else {
-        idCell.setText(attempt.id);
-      }
-
-      row.createEl("td", {
-        text: new Date(
-          attempt.timestamp
-        ).toLocaleString("ja-JP", {
-          timeZone: "Asia/Tokyo",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      });
-
-      row.createEl("td", {
-        text: attempt.selected.join(", "),
-      });
-
-      row.createEl("td", {
-        text:
-          attempt.correct === null
-            ? "採点除外"
-            : attempt.correct
-              ? "正解"
-              : "不正解",
-      });
+    const status = content.createEl("p", { text: "解答履歴を読み込んでいます…" });
+    try {
+      const [questions, history] = await Promise.all([
+        this.questionService.getQuestions(),
+        this.statisticsService.getAttemptHistory(),
+      ]);
+      if (version !== this.renderVersion) return;
+      status.remove();
+      renderInvalidAttempts(content, history.invalidLines);
+      renderAttemptHistory(
+        content, history.attempts, new Set(questions.map(question => question.id)), this.onOpenQuestion,
+      );
+    } catch (error) {
+      if (version !== this.renderVersion) return;
+      console.error("[Kokushi] Attempt history load error", error);
+      status.setText("解答履歴を読み込めませんでした。");
+      status.addClass("kokushi-dashboard-warning");
     }
   }
 
