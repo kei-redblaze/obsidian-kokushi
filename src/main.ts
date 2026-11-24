@@ -111,6 +111,11 @@ export default class KokushiPlugin extends Plugin {
         async record => {
           const quiz = await getQuizView();
           return quiz.startFromHistory(record);
+        },
+
+        async id => {
+          const quiz = await getQuizView();
+          await quiz.resumeDraft(id);
         }
       )
     );
@@ -133,14 +138,13 @@ export default class KokushiPlugin extends Plugin {
           active: true,
         });
       }
-
       await workspace.revealLeaf(leaf);
     };
 
     // リボンアイコン
     this.addRibbonIcon(
       "chart-no-axes-combined",
-      "国試ダッシュボード",
+      "ダッシュボード",
       () => {
         void openDashboard();
       }
@@ -149,7 +153,7 @@ export default class KokushiPlugin extends Plugin {
     // コマンドパレット
     this.addCommand({
       id: "open-kokushi-dashboard",
-      name: "国試ダッシュボードを開く",
+      name: "ダッシュボードを開く",
       callback: () => {
         void openDashboard();
       },

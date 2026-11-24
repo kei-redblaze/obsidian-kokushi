@@ -9,3 +9,5 @@ export const PATHS = {
 
 export const QUESTION_ID_PATTERN =
   /^(\d+)([A-F])([1-9]\d*)$/;
+
+export const DASHBOARD_HISTORY_LIMIT = 5;
