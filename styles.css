@@ -188,28 +188,57 @@ If your plugin does not need CSS, delete this file.
   border-top: 1px solid var(--background-modifier-border);
 }
 
-.kokushi-study-memo {
-  display: flex;
-  align-items: end;
-  gap: 8px;
-}
-
 .kokushi-study-field {
   display: grid;
-  flex: 1;
   min-width: 0;
   gap: 6px;
 }
 
-.kokushi-study-field input {
+.kokushi-study-field input,
+.kokushi-study-memo {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
 }
 
-.kokushi-study-status:not(:empty),
-.kokushi-study-error:not(:empty) {
-  margin-top: 8px;
+.kokushi-study-memo {
+  min-height: 4.5rem;
+  padding: 8px 10px;
+  resize: vertical;
+  background-color: transparent;
+  color: var(--text-normal);
+  border: 1px solid var(--text-muted);
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+.kokushi-study-memo:focus {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
+.kokushi-study-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.kokushi-study-link {
+  color: var(--link-color);
+  text-decoration: underline;
+}
+
+.kokushi-study-link:hover,
+.kokushi-study-link:focus-visible {
+  color: var(--link-color-hover);
+  text-decoration: underline;
+}
+
+.kokushi-study-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .kokushi-study-error {
@@ -220,6 +249,15 @@ If your plugin does not need CSS, delete this file.
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.kokushi-study-actions .mod-cta {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.kokushi-study-actions .mod-cta:hover:not(:disabled) {
+  background-color: var(--interactive-accent-hover);
 }
 
 /* ========================================
@@ -499,6 +537,14 @@ If your plugin does not need CSS, delete this file.
 .kokushi-start-button {
   width: 100%;
   margin-bottom: 16px;
+}
+
+.kokushi-scope .kokushi-start-button {
+  margin-bottom: 8px;
+}
+
+.kokushi-scope-dashboard {
+  width: 100%;
 }
 
 /* 選択ボタンの点滅・アニメーション抑制 */
