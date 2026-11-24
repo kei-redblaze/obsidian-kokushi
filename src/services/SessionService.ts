@@ -8,6 +8,7 @@ export interface SessionSummary {
   startedAt: string;
   total: number;
   result: SessionResult;
+  status: "completed" | "interrupted" | "active";
 }
 
 export interface DraftSummary {
@@ -18,7 +19,6 @@ export interface DraftSummary {
 }
 
 const SESSION_ID = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z_[a-f0-9]{16}$/;
-const PAGE_SIZE = 20;
 
 export class SessionService {
   private pending: Promise<void> = Promise.resolve();
@@ -89,7 +89,7 @@ export class SessionService {
     return drafts.sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
   }
 
-  async getRecent(limit = PAGE_SIZE): Promise<{
+  async getHistory(limit = Infinity): Promise<{
     sessions: SessionSummary[];
     invalid: number;
     hasMore: boolean;
@@ -101,7 +101,6 @@ export class SessionService {
     for (const file of this.getFiles()) {
       try {
         const record = await this.readSession(file);
-        if (record.status === "in-progress") continue;
         if (sessions.length === limit) return { sessions, invalid, hasMore: true };
 
         sessions.push({
@@ -109,6 +108,8 @@ export class SessionService {
           startedAt: record.startedAt,
           total: record.questions.length,
           result: record.result,
+          status: record.status !== "in-progress" ? "completed"
+            : this.activeDrafts.has(record.id) ? "active" : "interrupted",
         });
       } catch {
         invalid++;

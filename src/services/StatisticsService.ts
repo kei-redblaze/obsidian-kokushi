@@ -1,6 +1,6 @@
 
 import { App, TFile } from "obsidian";
-import { PATHS } from "../constants";
+import { DASHBOARD_HISTORY_LIMIT, PATHS } from "../constants";
 
 export type DashboardAttempt = {
   id: string;
@@ -106,34 +106,7 @@ export class StatisticsService {
     questionIds: string[]
   ): Promise<DashboardStatistics> {
     const availableIds = new Set(questionIds);
-    const attempts: DashboardAttempt[] = [];
-
-    let invalidLines = 0;
-
-    const file = this.app.vault.getAbstractFileByPath(
-      PATHS.attempts
-    );
-
-    if (file instanceof TFile) {
-      const content =
-        await this.app.vault.cachedRead(file);
-
-      for (const line of content.split(/\r?\n/)) {
-        if (!line.trim()) continue;
-
-        try {
-          const parsed: unknown = JSON.parse(line);
-
-          if (isAttempt(parsed)) {
-            attempts.push(parsed);
-          } else {
-            invalidLines++;
-          }
-        } catch {
-          invalidLines++;
-        }
-      }
-    }
+    const { attempts, invalidLines } = await this.readAttempts();
 
     // 問題ごとの最新記録
     // JSONLは記録順に追記される前提
@@ -278,9 +251,51 @@ export class StatisticsService {
           : null,
 
       daily,
-      recent: attempts.slice(-20).reverse(),
+      recent: this.newestFirst(attempts).slice(0, DASHBOARD_HISTORY_LIMIT),
       invalidLines,
       availableIds,
     };
   }
+  async getAttemptHistory(): Promise<{ attempts: DashboardAttempt[]; invalidLines: number }> {
+    const { attempts, invalidLines } = await this.readAttempts();
+    return { attempts: this.newestFirst(attempts), invalidLines };
+  }
+
+  private newestFirst(attempts: DashboardAttempt[]): DashboardAttempt[] {
+    return [...attempts].reverse().sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+  }
+
+  private async readAttempts(): Promise<{ attempts: DashboardAttempt[]; invalidLines: number }> {
+    const attempts: DashboardAttempt[] = [];
+
+    let invalidLines = 0;
+
+    const file = this.app.vault.getAbstractFileByPath(
+      PATHS.attempts
+    );
+
+    if (file instanceof TFile) {
+      const content =
+        await this.app.vault.cachedRead(file);
+
+      for (const line of content.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+
+        try {
+          const parsed: unknown = JSON.parse(line);
+
+          if (isAttempt(parsed)) {
+            attempts.push(parsed);
+          } else {
+            invalidLines++;
+          }
+        } catch {
+          invalidLines++;
+        }
+      }
+    }
+
+    return { attempts, invalidLines };
+  }
+
 }
