@@ -14,7 +14,23 @@ If your plugin does not need CSS, delete this file.
 }
 
 .kokushi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 24px;
+}
+
+.kokushi-question-progress {
+  margin: 0;
+}
+
+.kokushi-question-progress strong {
+  font-weight: 700;
+}
+
+.kokushi-header button {
+  flex-shrink: 0;
 }
 
 .kokushi-question {
@@ -46,11 +62,23 @@ If your plugin does not need CSS, delete this file.
 }
 
 .kokushi-option-text {
+  display: flex;
   flex: 1;
+  align-items: baseline;
+  gap: 0.35em;
   min-width: 0;
 }
 
-.kokushi-option-text p {
+.kokushi-option-letter {
+  flex: none;
+}
+
+.kokushi-option-markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.kokushi-option-markdown p {
   margin: 0;
 }
 
@@ -59,21 +87,12 @@ If your plugin does not need CSS, delete this file.
   font-size: 18px;
 }
 
-.kokushi-submit {
-  margin-top: 12px;
-}
-
 .kokushi-result {
   margin-top: 24px;
   padding: 16px;
   border-radius: 8px;
   background: var(--background-secondary);
 }
-
-.kokushi-navigation {
-  margin-top: 20px;
-}
-
 
 /* ========================================
    Kokushi Dashboard
@@ -186,6 +205,10 @@ If your plugin does not need CSS, delete this file.
   width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
+}
+
+.kokushi-history-page {
+  margin-top: 16px;
 }
 
 .kokushi-dashboard-history th,
@@ -389,18 +412,26 @@ If your plugin does not need CSS, delete this file.
    ======================================== */
 
 .kokushi-navigation {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
   gap: 12px;
   margin-top: 24px;
 }
 
+.kokushi-navigation-forward {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
 .kokushi-navigation button {
-  flex: 1;
-  min-width: 120px;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
   min-height: 40px;
+  margin: 0;
+  white-space: normal;
 }
 
 .kokushi-navigation button:disabled {
