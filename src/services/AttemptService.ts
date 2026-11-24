@@ -5,7 +5,8 @@ import {
 } from "obsidian";
 
 import { Attempt } from "../types";
-import { PATHS } from "../constants";
+import { ATTEMPTS_FOLDER, PATHS } from "../constants";
+import { ensureFolder } from "./VaultFolder";
 
 export class AttemptService {
   private queue: Promise<void> = Promise.resolve();
@@ -33,6 +34,7 @@ export class AttemptService {
         }
 
         // 初回のみ履歴ファイルを作成
+        await ensureFolder(this.app.vault, ATTEMPTS_FOLDER);
         await this.app.vault.create(path, line);
       }
     );
