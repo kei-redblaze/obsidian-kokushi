@@ -588,3 +588,29 @@ If your plugin does not need CSS, delete this file.
     160px + env(safe-area-inset-bottom, 0px)
   );
 }
+
+
+/* ========================================
+   ダッシュボード：グラフのスマホ幅対応
+   ======================================== */
+
+.kokushi-dashboard-chart-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+.kokushi-dashboard-chart-scroll svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+/* スマホではグラフ内の余白を少し減らす */
+@media (max-width: 600px) {
+  .kokushi-dashboard-chart-scroll {
+    padding: 4px;
+  }
+}

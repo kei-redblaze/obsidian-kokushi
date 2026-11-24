@@ -1622,7 +1622,9 @@ export class QuizView extends ItemView {
         text: isLast
           ? "演習終了"
           : "次の問題 →",
-        cls: "mod-cta",
+        cls: this.graded !== null
+          ? "mod-cta"
+          : "",
       }
     );
 

@@ -435,14 +435,12 @@ export class DashboardView extends ItemView {
       `0 0 ${width} ${height}`
     );
 
-    svg.setAttribute(
-      "width",
-      String(width)
-    );
+    svg.setAttribute("width", "100%");
+    svg.setAttribute("height", String(height));
 
     svg.setAttribute(
-      "height",
-      String(height)
+      "preserveAspectRatio",
+      "xMidYMid meet"
     );
 
     svg.setAttribute("role", "img");
