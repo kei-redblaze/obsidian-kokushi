@@ -580,6 +580,24 @@ export class DashboardView extends ItemView {
     const step =
       plotWidth /
       Math.max(days.length - 1, 1);
+    
+    const labelInterval = Math.max(
+      1,
+      Math.ceil(days.length / 8)
+    );
+
+    // データポイントのX座標
+    const getX = (index: number): number => {
+      if (days.length === 1) {
+        return left + plotWidth / 2;
+      }
+
+      return left + index * step;
+    };
+
+    // -----------------------------–-------------------------
+    // 縦軸・グリッド線
+    // -------------------------------------------------------
 
     for (const rate of [0, 50, 100]) {
       const y =
@@ -607,17 +625,22 @@ export class DashboardView extends ItemView {
       );
     }
 
+    // --------------------------------------------------------
+    // 折れ線・データポイント
+    // --------------------------------------------------------
+
     let previous:
       { x: number; y: number } | null = null;
 
     days.forEach((day, index) => {
+      const x = getX(index);
+
       if (day.accuracy === null) {
         // 採点対象の解答がない日は線を切る
         previous = null;
         return;
       }
 
-      const x = left + index * step;
       const y =
         bottom -
         day.accuracy / 100 * plotHeight;
@@ -641,25 +664,51 @@ export class DashboardView extends ItemView {
       });
 
       previous = { x, y };
+    });
 
-      const labelInterval = Math.max(
-        1,
-        Math.ceil(days.length / 8)
-      );
+    // -------------------------------------------------------
+    // 横軸の日付ラベル
+    // -------------------------------------------------------
 
-      if (index % labelInterval === 0) {
-        this.addSvgElement(
-          svg,
-          "text",
-          {
-            x: String(x),
-            y: "176",
-            fill: "currentColor",
-            "font-size": "10",
-          },
-          day.date.slice(5)
+    days.forEach((day, index) => {
+      const isFirst = index === 0;
+      const isLast = index === days.length - 1;
+
+      const showLabel =
+        isFirst ||
+        isLast ||
+        (
+          index % labelInterval === 0 &&
+          days.length - 1 - index >= labelInterval
         );
+
+      if (!showLabel) {
+        return;
       }
+
+      const x = getX(index);
+
+      const textAnchor =
+        days.length === 1
+          ? "middle"
+          : isFirst
+            ? "start"
+            : isLast
+              ? "end"
+              : "middle";
+              
+      this.addSvgElement(
+        svg,
+        "text",
+        {
+          x: String(x),
+          y: "176",
+          fill: "currentColor",
+          "font-size": "10",
+          "text-anchor": textAnchor,
+        },
+        day.date.slice(5)
+      );
     });
 
     root.createEl("p", {
