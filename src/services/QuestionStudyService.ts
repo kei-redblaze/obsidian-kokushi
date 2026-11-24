@@ -33,7 +33,7 @@ export class QuestionStudyService {
     return this.enqueue(async () => {
       await this.app.vault.process(this.getMetadataFile(question), data => {
         const doc = parseMetadata(data, question.id);
-        const value = memo.replace(/[\r\n]+/g, " ");
+        const value = memo.replace(/\r\n?/g, "\n");
         const existing = doc.get("memo", true);
         if (isScalar(existing) && existing.value === value && existing.type === Scalar.QUOTE_DOUBLE) {
           return data;
@@ -62,6 +62,26 @@ export class QuestionStudyService {
 
         doc.addIn(["relatedNotes"], new Scalar(path));
         return doc.toString({ lineWidth: 0 });
+      });
+    });
+    return this.load(question);
+  }
+
+  async unlinkNotes(question: Question, paths: string[]): Promise<QuestionStudy> {
+    const selected = new Set(paths);
+    await this.enqueue(async () => {
+      await this.app.vault.process(this.getMetadataFile(question), data => {
+        const doc = parseMetadata(data, question.id);
+        const links = noteLinks(doc);
+        let changed = false;
+        for (let index = links.length - 1; index >= 0; index--) {
+          const link = links[index];
+          if (link && selected.has(link.value)) {
+            links.splice(index, 1);
+            changed = true;
+          }
+        }
+        return changed ? doc.toString({ lineWidth: 0 }) : data;
       });
     });
     return this.load(question);

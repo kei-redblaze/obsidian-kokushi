@@ -164,6 +164,10 @@ function isSessionRecord(value: unknown, id: string): value is SessionRecord {
     (scope.exams !== null && (!Array.isArray(scope.exams) || !scope.exams.every(exam => typeof exam === "string"))) ||
     (scope.order !== "sequential" && scope.order !== "random") ||
     (scope.target !== "all" && scope.target !== "unanswered" && scope.target !== "incorrect") ||
+    (scope.targets !== undefined && (!Array.isArray(scope.targets) ||
+      scope.targets.length < 1 || scope.targets.length > 3 ||
+      new Set(scope.targets).size !== scope.targets.length ||
+      !scope.targets.every(target => target === "correct" || target === "incorrect" || target === "unanswered"))) ||
     typeof result !== "object" || result === null
   ) return false;
 
