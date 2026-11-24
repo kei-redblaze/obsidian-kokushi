@@ -45,7 +45,6 @@ If your plugin does not need CSS, delete this file.
 
 .kokushi-question {
   margin-bottom: 24px;
-  overflow-x: auto;
 }
 
 .kokushi-question img {
@@ -77,6 +76,11 @@ If your plugin does not need CSS, delete this file.
   gap: 12px;
   max-width: 100%;
   overflow-x: auto;
+}
+
+.kokushi-image-gallery-inline {
+  display: inline-flex;
+  vertical-align: middle;
 }
 
 .kokushi-image-gallery > * {
