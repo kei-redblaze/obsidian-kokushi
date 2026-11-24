@@ -142,12 +142,24 @@ If your plugin does not need CSS, delete this file.
 }
 
 .kokushi-dashboard-chart-area {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
   margin: 12px 0;
+}
+
+.kokushi-dashboard-chart {
+  min-width: 0;
+}
+
+.kokushi-dashboard-chart h4 {
+  margin: 0 0 8px;
 }
 
 .kokushi-dashboard-chart-scroll {
   overflow-x: auto;
   max-width: 100%;
+  box-sizing: border-box;
   border: 1px solid var(--background-modifier-border);
   border-radius: 8px;
   padding: 8px;
@@ -155,6 +167,12 @@ If your plugin does not need CSS, delete this file.
 
 .kokushi-dashboard-chart-scroll svg {
   display: block;
+  width: 100%;
+  height: auto;
+}
+
+.kokushi-dashboard-chart-scroll.is-wide svg {
+  width: var(--kokushi-chart-width);
   max-width: none;
 }
 
@@ -216,7 +234,7 @@ If your plugin does not need CSS, delete this file.
   }
 }
 
-/* 回次の複数選択 */
+/* 出典の複数選択 */
 
 .kokushi-scope-header {
   display: flex;
@@ -281,7 +299,7 @@ If your plugin does not need CSS, delete this file.
   margin: 18px 0;
 }
 
-.kokushi-scope-group h4 {
+.kokushi-scope-group h3 {
   margin: 0 0 10px;
 }
 
@@ -434,7 +452,7 @@ If your plugin does not need CSS, delete this file.
    モバイル版：画面最下部の操作領域を確保
    ======================================== */
 
-/* 国試演習ビュー・ダッシュボード共通 */
+/* 演習ビュー・ダッシュボード共通 */
 .kokushi-quiz,
 .kokushi-dashboard {
   box-sizing: border-box;
@@ -590,25 +608,6 @@ If your plugin does not need CSS, delete this file.
 }
 
 
-/* ========================================
-   ダッシュボード：グラフのスマホ幅対応
-   ======================================== */
-
-.kokushi-dashboard-chart-scroll {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
-  box-sizing: border-box;
-}
-
-.kokushi-dashboard-chart-scroll svg {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  height: auto;
-}
-
-/* スマホではグラフ内の余白を少し減らす */
 @media (max-width: 600px) {
   .kokushi-dashboard-chart-scroll {
     padding: 4px;
