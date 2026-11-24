@@ -8,6 +8,7 @@ import {
 
 import { QuestionService } from "./services/QuestionService";
 import { AttemptService } from "./services/AttemptService";
+import { SessionService } from "./services/SessionService";
 
 import {
   DashboardView,
@@ -25,19 +26,21 @@ export default class KokushiPlugin extends Plugin {
 
     const attemptService =
       new AttemptService(this.app);
+    const sessionService = new SessionService(this.app.vault);
 
     this.registerView(
       VIEW_TYPE_KOKUSHI,
       leaf => new QuizView(
         leaf,
         questionService,
-        attemptService
+        attemptService,
+        sessionService
       )
     );
 
     this.addRibbonIcon(
       "graduation-cap",
-      "国試演習を開く",
+      "演習を開く",
       () => {
         void this.activateQuiz();
       }
@@ -45,7 +48,7 @@ export default class KokushiPlugin extends Plugin {
 
     this.addCommand({
       id: "open-quiz",
-      name: "国試演習を開く",
+      name: "演習を開く",
       callback: () => {
         void this.activateQuiz();
       },
@@ -91,6 +94,7 @@ export default class KokushiPlugin extends Plugin {
         leaf,
         questionService,
         statisticsService,
+        sessionService,
 
         // 未回答・誤答演習へ
         async target => {
@@ -102,6 +106,11 @@ export default class KokushiPlugin extends Plugin {
         async id => {
           const quiz = await getQuizView();
           await quiz.openQuestionFromDashboard(id);
+        },
+
+        async record => {
+          const quiz = await getQuizView();
+          return quiz.startFromHistory(record);
         }
       )
     );
