@@ -10,11 +10,16 @@ import {
   Question,
   Attempt,
   GradeResult,
+  SessionResult,
+  SessionRecord,
 } from "../types";
 
 import { QuestionService } from "../services/QuestionService";
 import { GradingService } from "../services/GradingService";
 import { AttemptService } from "../services/AttemptService";
+import { SessionService } from "../services/SessionService";
+import { QUESTION_ID_PATTERN } from "../constants";
+import { renderDraftList } from "./DraftList";
 
 export const VIEW_TYPE_KOKUSHI = "kokushi-quiz";
 
@@ -38,31 +43,16 @@ type CountMode = "all" | "ten" | "custom";
 
 type QuizScope = {
   exams: string[] | null;
-  section: string;
   order: OrderMode;
   target: TargetMode;
   countMode: CountMode;
   customCount: string;
 };
 
-type ParsedQuestionId = {
-  exam: string;
-  section: string;
-  number: number;
-};
-
 type QuestionState = {
   selected: string[];
   graded: GradeResult | null;
   unknown: boolean;
-};
-
-type SessionResult = {
-  correct: number;
-  incorrect: number;
-  unanswered: number;
-  excluded: number;
-  accuracy: number | null;
 };
 
 // ========================================
@@ -86,6 +76,14 @@ export class QuizView extends ItemView {
   private unknown = false;
   private graded: GradeResult | null = null;
   private saving = false;
+  private session: Pick<SessionRecord, "id" | "startedAt" | "scope" | "sourceSessionId"> | null = null;
+  private sessionCompleted = false;
+  private draftDirty = false;
+  private draftTimer: number | null = null;
+  private draftWrite = Promise.resolve(true);
+  private draftErrorShown = false;
+  private pendingOperation: Promise<void> | null = null;
+  private closing = false;
 
   // ========================================
   // セッション内の解答状態
@@ -103,7 +101,6 @@ export class QuizView extends ItemView {
 
   private quizScope: QuizScope = {
     exams: null,
-    section: "all",
     order: "sequential",
     target: "all",
     countMode: "all",
@@ -113,7 +110,8 @@ export class QuizView extends ItemView {
   constructor(
     leaf: WorkspaceLeaf,
     private questionService: QuestionService,
-    private attemptService: AttemptService
+    private attemptService: AttemptService,
+    private sessionService: SessionService
   ) {
     super(leaf);
   }
@@ -127,7 +125,7 @@ export class QuizView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "国試演習";
+    return "演習";
   }
 
   getIcon(): string {
@@ -135,13 +133,17 @@ export class QuizView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
+    this.closing = false;
     await this.loadQuestions();
   }
 
   async onClose(): Promise<void> {
+    this.closing = true;
+    await this.pendingOperation?.catch(() => {});
+    if (!await this.flushDraft() && this.draftDirty) await this.flushDraft();
     this.allQuestions = [];
     this.questions = [];
-    this.questionStates.clear();
+    this.resetSession();
   }
 
   // ========================================
@@ -174,9 +176,10 @@ export class QuizView extends ItemView {
     });
 
     try {
-      this.allQuestions =
-        await this.questionService.getQuestions();
+      const questions = await this.questionService.getQuestions();
+      if (this.closing) return;
 
+      this.allQuestions = questions;
       this.questions = [];
       this.resetSession();
 
@@ -200,26 +203,6 @@ export class QuizView extends ItemView {
   }
 
   // ========================================
-  // 問題ID解析
-  // ========================================
-
-  private parseQuestionId(
-    id: string
-  ): ParsedQuestionId | null {
-    const match = id.match(
-      /^(\d+)([A-F])([1-9]\d*)$/
-    );
-
-    if (!match) return null;
-
-    return {
-      exam: match[1] ?? "",
-      section: match[2] ?? "",
-      number: Number(match[3]),
-    };
-  }
-
-  // ========================================
   // 出題範囲選択
   // ========================================
 
@@ -229,35 +212,25 @@ export class QuizView extends ItemView {
     root.empty();
     this.resetScroll();
 
-    root.removeClass("kokushi-scope");
+    root.addClass("kokushi-quiz");
+    root.addClass("kokushi-scope");
+    root.createEl("h2", { text: "出題範囲を選択" });
+    void renderDraftList(root.createDiv(), this.sessionService, id => this.resumeDraft(id));
 
-    root.createEl("p", {
-      text: "解答履歴を読み込んでいます...",
-    });
-
+    const loading = root.createEl("p", { text: "解答履歴を読み込んでいます..." });
     let attempts: Attempt[];
 
     try {
-      attempts =
-        await this.attemptService.getAttempts();
+      attempts = await this.attemptService.getAttempts();
     } catch (error) {
-      console.error(
-        "[Kokushi] History load error",
-        error
-      );
-
-      root.empty();
-
-      root.createEl("p", {
-        text: "解答履歴を読み込めませんでした。",
-      });
-
-      new Notice(
-        "解答履歴の読み込みに失敗しました"
-      );
-
+      console.error("[Kokushi] History load error", error);
+      loading.setText("解答履歴を読み込めませんでした。");
+      new Notice("解答履歴の読み込みに失敗しました");
       return;
     }
+
+    if (this.closing || this.session) return;
+    loading.remove();
 
     // ----------------------------------------
     // 最新解答結果
@@ -273,21 +246,8 @@ export class QuizView extends ItemView {
       );
     }
 
-    root.empty();
-
-    root.addClass("kokushi-quiz");
-    root.addClass("kokushi-scope");
-
-    root.createEl("h2", {
-      text: "医師国家試験演習",
-    });
-
-    root.createEl("h3", {
-      text: "出題範囲を選択",
-    });
-
     // ========================================
-    // 利用可能な回次・冊子
+    // 利用可能な出典
     // ========================================
 
     const exams = [
@@ -295,9 +255,7 @@ export class QuizView extends ItemView {
         this.allQuestions
           .map(
             question =>
-              this.parseQuestionId(
-                question.id
-              )?.exam
+              question.id.match(QUESTION_ID_PATTERN)?.[1]
           )
           .filter(
             (value): value is string => !!value
@@ -306,21 +264,6 @@ export class QuizView extends ItemView {
     ].sort(
       (a, b) => Number(b) - Number(a)
     );
-
-    const sections = [
-      ...new Set(
-        this.allQuestions
-          .map(
-            question =>
-              this.parseQuestionId(
-                question.id
-              )?.section
-          )
-          .filter(
-            (value): value is string => !!value
-          )
-      ),
-    ].sort();
 
     if (this.quizScope.exams !== null) {
       this.quizScope.exams =
@@ -335,25 +278,11 @@ export class QuizView extends ItemView {
 
     const getFilteredQuestions = (): Question[] => {
       return this.allQuestions.filter(question => {
-        const parsed =
-          this.parseQuestionId(question.id);
+        const exam = question.id.match(QUESTION_ID_PATTERN)?.[1];
 
-        if (!parsed) return false;
-
-        // 回次
         if (
-          this.quizScope.exams !== null &&
-          !this.quizScope.exams.includes(
-            parsed.exam
-          )
-        ) {
-          return false;
-        }
-
-        // 問題冊子
-        if (
-          this.quizScope.section !== "all" &&
-          parsed.section !== this.quizScope.section
+          !exam ||
+          (this.quizScope.exams !== null && !this.quizScope.exams.includes(exam))
         ) {
           return false;
         }
@@ -422,7 +351,7 @@ export class QuizView extends ItemView {
         cls: "kokushi-scope-group",
       });
 
-      group.createEl("h4", {
+      group.createEl("h3", {
         text: title,
       });
 
@@ -568,10 +497,10 @@ export class QuizView extends ItemView {
     };
 
     // ========================================
-    // 回次：複数選択
+    // 出典の複数選択
     // ========================================
 
-    const examGroup = createGroup("回次");
+    const examGroup = createGroup("出典");
 
     const examActions = examGroup.createDiv({
       cls: "kokushi-scope-actions",
@@ -665,28 +594,6 @@ export class QuizView extends ItemView {
     };
 
     syncExams();
-
-    // ========================================
-    // 問題冊子
-    // ========================================
-
-    createButtons(
-      createGroup("問題冊子"),
-      [
-        {
-          value: "all",
-          label: "すべて",
-        },
-        ...sections.map(section => ({
-          value: section,
-          label: section,
-        })),
-      ],
-      () => this.quizScope.section,
-      value => {
-        this.quizScope.section = value;
-      }
-    );
 
     // ========================================
     // 出題順序
@@ -815,6 +722,7 @@ export class QuizView extends ItemView {
     // ========================================
 
     startButton.addEventListener("click", () => {
+      if (this.saving || this.closing) return;
       const filtered =
         getFilteredQuestions();
 
@@ -854,7 +762,7 @@ export class QuizView extends ItemView {
       this.questions =
         filtered.slice(0, actual);
 
-      this.resetSession();
+      this.startSession();
 
       void this.renderQuiz(true);
     });
@@ -875,9 +783,171 @@ export class QuizView extends ItemView {
   }
 
   private resetSession(): void {
+    this.cancelDraftTimer();
+    if (this.session) this.sessionService.releaseDraft(this.session.id);
+    this.session = null;
+    this.sessionCompleted = false;
+    this.draftDirty = false;
+    this.draftWrite = Promise.resolve(true);
+    this.draftErrorShown = false;
     this.questionStates.clear();
     this.index = 0;
     this.resetAnswer();
+  }
+
+  private startSession(sourceSessionId?: string): void {
+    this.resetSession();
+    if (this.questions.length === 0) return;
+
+    const { exams, order, target } = this.quizScope;
+    const startedAt = new Date().toISOString();
+    const suffix = Array.from(crypto.getRandomValues(new Uint32Array(2)))
+      .map(value => value.toString(16).padStart(8, "0"))
+      .join("");
+
+    this.session = {
+      id: `${startedAt.replace(/:/g, "-")}_${suffix}`,
+      startedAt,
+      scope: { exams: exams === null ? null : [...exams], order, target },
+      sourceSessionId,
+    };
+    this.sessionService.claimDraft(this.session.id);
+    this.draftDirty = true;
+    void this.flushDraft();
+  }
+
+  private createSessionRecord(
+    session: NonNullable<QuizView["session"]>,
+    status: "in-progress" | "completed"
+  ): SessionRecord {
+    return {
+      ...session,
+      schemaVersion: 1,
+      recordedAt: new Date().toISOString(),
+      status,
+      currentIndex: status === "in-progress" ? this.index : undefined,
+      result: this.getSessionResult(),
+      questions: this.questions.map((question, index) => {
+        const state = this.questionStates.get(index);
+        return {
+          id: question.id,
+          selected: state?.selected ?? [],
+          grade: state?.graded ?? null,
+          unknown: state?.unknown ?? false,
+        };
+      }),
+    };
+  }
+
+  private cancelDraftTimer(): void {
+    if (this.draftTimer === null) return;
+    window.clearTimeout(this.draftTimer);
+    this.draftTimer = null;
+  }
+
+  private scheduleDraftSave(immediate = false): void {
+    if (!this.session || this.sessionCompleted) return;
+    this.draftDirty = true;
+
+    if (immediate) {
+      void this.flushDraft();
+      return;
+    }
+
+    this.cancelDraftTimer();
+    this.draftTimer = window.setTimeout(() => { void this.flushDraft(); }, 350);
+  }
+
+  private flushDraft(): Promise<boolean> {
+    this.cancelDraftTimer();
+    const session = this.session;
+    if (!session || this.sessionCompleted) return Promise.resolve(true);
+    if (!this.draftDirty) return this.draftWrite;
+
+    this.saveCurrentState();
+    this.draftDirty = false;
+    this.draftWrite = this.sessionService.save(this.createSessionRecord(session, "in-progress")).then(
+      () => {
+        if (this.session === session) this.draftErrorShown = false;
+        return true;
+      },
+      error => {
+        console.error("[Kokushi] Draft save error", error);
+        if (this.session === session && !this.sessionCompleted) {
+          this.draftDirty = true;
+          if (!this.draftErrorShown) {
+            this.draftErrorShown = true;
+            new Notice("中断データを保存できませんでした。");
+          }
+        }
+        return false;
+      },
+    );
+    return this.draftWrite;
+  }
+
+  private async leaveSession(): Promise<boolean> {
+    if (this.saving || this.closing) return false;
+    this.saving = true;
+    try {
+      return await this.flushDraft() && !this.closing;
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  private async resumeDraft(id: string): Promise<void> {
+    if (this.saving || this.closing || this.session) return;
+
+    if (!this.sessionService.claimDraft(id)) {
+      new Notice("この演習は別のペインで開いています。");
+      return;
+    }
+
+    this.saving = true;
+    let adopted = false;
+    try {
+      const record = await this.sessionService.getSession(id);
+      if (this.closing) return;
+      if (record?.status !== "in-progress" || record.currentIndex === undefined) {
+        new Notice("再開できる演習が見つかりませんでした。");
+        return;
+      }
+
+      const available = new Map(this.allQuestions.map(question => [question.id, question]));
+      const questions: Question[] = [];
+      for (const item of record.questions) {
+        const question = available.get(item.id);
+        if (!question) {
+          new Notice(`問題 ${item.id} が見つからないため、演習を再開できません。`);
+          return;
+        }
+        questions.push(question);
+      }
+
+      this.resetSession();
+      const { startedAt, scope, sourceSessionId } = record;
+      this.session = { id, startedAt, scope, sourceSessionId };
+      adopted = true;
+      this.quizScope = { ...this.quizScope, ...scope };
+      this.questions = questions;
+      record.questions.forEach((item, index) => {
+        this.questionStates.set(index, {
+          selected: [...item.selected],
+          unknown: item.unknown,
+          graded: item.grade,
+        });
+      });
+      this.index = record.currentIndex;
+      this.restoreState(this.index);
+      await this.renderQuiz(true);
+    } catch (error) {
+      console.error("[Kokushi] Draft resume error", error);
+      new Notice("中断した演習を読み込めませんでした。");
+    } finally {
+      if (!adopted) this.sessionService.releaseDraft(id);
+      this.saving = false;
+    }
   }
 
   private saveCurrentState(): void {
@@ -924,21 +994,18 @@ export class QuizView extends ItemView {
 
     if (
       newIndex < 0 ||
-      newIndex > this.questions.length
+      newIndex >= this.questions.length
     ) {
       return;
     }
 
-    // 未採点でも状態だけメモリ保存
+    // 未採点の解答を保持してから問題を移動する。
     this.saveCurrentState();
 
     this.index = newIndex;
 
-    if (newIndex === this.questions.length) {
-      this.resetAnswer();
-    } else {
-      this.restoreState(newIndex);
-    }
+    this.restoreState(newIndex);
+    this.scheduleDraftSave(true);
 
     // 問題遷移時は最上部へ戻す
     await this.renderQuiz(true);
@@ -949,13 +1016,33 @@ export class QuizView extends ItemView {
   // ========================================
 
   private async openSessionResults(): Promise<void> {
-    if (this.saving) return;
+    const session = this.session;
+    if (this.saving || this.closing || !session) return;
 
     this.saveCurrentState();
+    this.cancelDraftTimer();
+    this.saving = true;
 
+    try {
+      const write = this.sessionService.save(this.createSessionRecord(session, "completed"));
+      this.pendingOperation = write;
+      await write;
+      if (this.session !== session) return;
+      this.sessionCompleted = true;
+      this.sessionService.releaseDraft(session.id);
+    } catch (error) {
+      console.error("[Kokushi] Session save error", error);
+      if (this.draftDirty && !this.closing) this.scheduleDraftSave();
+      new Notice("演習履歴を保存できませんでした。もう一度お試しください。");
+      return;
+    } finally {
+      this.pendingOperation = null;
+      if (this.session === session) this.saving = false;
+    }
+
+    if (this.closing || this.session !== session) return;
     this.index = this.questions.length;
     this.resetAnswer();
-
     await this.renderQuiz(true);
   }
 
@@ -1149,10 +1236,6 @@ export class QuizView extends ItemView {
       cls: "kokushi-header",
     });
 
-    header.createEl("h2", {
-      text: "医師国家試験演習",
-    });
-
     header.createEl("p", {
       text:
         `${question.id} ` +
@@ -1165,16 +1248,17 @@ export class QuizView extends ItemView {
 
     const backButton =
       header.createEl("button", {
-        text: "範囲選択に戻る",
+        text: this.sessionCompleted ? "範囲選択に戻る" : "中断して範囲選択に戻る",
       });
 
     backButton.disabled = this.saving;
 
-    backButton.onclick = () => {
-      if (this.saving) return;
+    backButton.onclick = async () => {
+      if (!await this.leaveSession()) return;
 
-      this.resetAnswer();
-      void this.renderScopeSelection();
+      this.questions = [];
+      this.resetSession();
+      await this.renderScopeSelection();
     };
 
     // ========================================
@@ -1282,6 +1366,8 @@ export class QuizView extends ItemView {
       if (this.unknown) {
         this.selected = [];
       }
+
+      this.scheduleDraftSave();
 
       // ボタン操作は画面遷移ではない
       // スクロール位置を維持する
@@ -1472,6 +1558,7 @@ export class QuizView extends ItemView {
         }
 
         updateSubmit();
+        this.scheduleDraftSave();
       });
     }
   }
@@ -1521,6 +1608,7 @@ export class QuizView extends ItemView {
           : [];
 
       updateSubmit();
+      this.scheduleDraftSave();
     });
   }
 
@@ -1537,6 +1625,7 @@ export class QuizView extends ItemView {
 
     this.saving = true;
 
+    const session = this.session;
     const selected = [...this.selected];
     const wasUnknown = this.unknown;
 
@@ -1551,7 +1640,7 @@ export class QuizView extends ItemView {
             );
 
     try {
-      await this.attemptService.save({
+      const write = this.attemptService.save({
         id: question.id,
         timestamp: new Date().toISOString(),
         selected,
@@ -1560,27 +1649,35 @@ export class QuizView extends ItemView {
             ? null
             : result === "correct",
       });
+      this.pendingOperation = write;
+      await write;
+      this.pendingOperation = null;
 
+      if (this.session !== session) return;
       this.graded = result;
       this.saving = false;
 
       this.saveCurrentState();
+      this.scheduleDraftSave(true);
+      if (this.closing) return;
 
       // 採点後は現在のスクロール位置を維持
       await this.renderQuiz(false);
     } catch (error) {
+      this.pendingOperation = null;
       console.error(
         "[Kokushi] Attempt save error",
         error
       );
 
+      if (this.session !== session) return;
       this.saving = false;
 
       new Notice(
         "解答履歴を保存できませんでした。"
       );
 
-      await this.renderQuiz(false);
+      if (!this.closing) await this.renderQuiz(false);
     }
   }
 
@@ -1687,9 +1784,12 @@ export class QuizView extends ItemView {
     nextButton.disabled = this.saving;
 
     nextButton.onclick = () => {
-      void this.moveToQuestion(
-        this.index + 1
-      );
+      if (isLast) {
+        void this.openSessionResults();
+        return;
+      }
+
+      void this.moveToQuestion(this.index + 1);
     };
 
     // ----------------------------------------
@@ -2108,7 +2208,7 @@ export class QuizView extends ItemView {
       });
 
     restartButton.onclick = () => {
-      this.resetSession();
+      this.startSession();
 
       void this.renderQuiz(true);
     };
@@ -2124,8 +2224,8 @@ export class QuizView extends ItemView {
       });
 
     scopeButton.onclick = () => {
-      this.resetAnswer();
-
+      this.questions = [];
+      this.resetSession();
       void this.renderScopeSelection();
     };
   }
@@ -2137,10 +2237,13 @@ export class QuizView extends ItemView {
   public async startFromDashboard(
     target: "unanswered" | "incorrect"
   ): Promise<void> {
+    if (!await this.leaveSession()) return;
     await this.loadQuestions();
+    if (this.closing) return;
 
     const attempts =
       await this.attemptService.getAttempts();
+    if (this.closing) return;
 
     const latestResults =
       new Map<string, boolean | null>();
@@ -2154,7 +2257,6 @@ export class QuizView extends ItemView {
 
     this.quizScope = {
       exams: null,
-      section: "all",
       order: "sequential",
       target,
       countMode: "all",
@@ -2176,7 +2278,7 @@ export class QuizView extends ItemView {
         );
       });
 
-    this.resetSession();
+    this.startSession();
 
     await this.renderQuiz(true);
   }
@@ -2188,7 +2290,9 @@ export class QuizView extends ItemView {
   public async openQuestionFromDashboard(
     id: string
   ): Promise<void> {
+    if (!await this.leaveSession()) return;
     await this.loadQuestions();
+    if (this.closing) return;
 
     const question =
       this.allQuestions.find(
@@ -2205,7 +2309,6 @@ export class QuizView extends ItemView {
 
     this.quizScope = {
       exams: null,
-      section: "all",
       order: "sequential",
       target: "all",
       countMode: "all",
@@ -2214,8 +2317,53 @@ export class QuizView extends ItemView {
 
     this.questions = [question];
 
-    this.resetSession();
+    this.startSession();
 
     await this.renderQuiz(true);
+  }
+
+  public async startFromHistory(record: SessionRecord): Promise<boolean> {
+    if (!await this.leaveSession()) return false;
+
+    this.saving = true;
+    try {
+      const allQuestions = await this.questionService.getQuestions();
+      if (this.closing) return false;
+
+      const byId = new Map(allQuestions.map(question => [question.id, question]));
+      const incorrect = record.questions.filter(question => question.grade === "incorrect");
+      const questions = incorrect.flatMap(item => {
+        const question = byId.get(item.id);
+        return question ? [question] : [];
+      });
+
+      if (questions.length === 0) {
+        new Notice("再演習できる誤答問題がありません。");
+        return false;
+      }
+
+      if (questions.length < incorrect.length) {
+        new Notice(`${incorrect.length - questions.length}問が見つからないため、読み込めた問題で再演習します。`);
+      }
+
+      this.allQuestions = allQuestions;
+      this.questions = questions;
+      this.quizScope = {
+        exams: null,
+        order: "sequential",
+        target: "incorrect",
+        countMode: "all",
+        customCount: "25",
+      };
+      this.startSession(record.id);
+      await this.renderQuiz(true);
+      return true;
+    } catch (error) {
+      console.error("[Kokushi] History retry error", error);
+      new Notice("誤答問題を読み込めませんでした。");
+      return false;
+    } finally {
+      this.saving = false;
+    }
   }
 }

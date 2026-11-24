@@ -6,6 +6,9 @@ import {
 } from "obsidian";
 
 import { QuestionService } from "../services/QuestionService";
+import { SessionService } from "../services/SessionService";
+import { SessionRecord } from "../types";
+import { renderSessionHistory } from "./SessionHistory";
 import {
   StatisticsService,
   DashboardStatistics,
@@ -25,12 +28,14 @@ export class DashboardView extends ItemView {
     leaf: WorkspaceLeaf,
     private questionService: QuestionService,
     private statisticsService: StatisticsService,
+    private sessionService: SessionService,
     private onStartQuiz: (
       target: DashboardTarget
     ) => Promise<void>,
     private onOpenQuestion: (
       id: string
-    ) => Promise<void>
+    ) => Promise<void>,
+    private onRetrySession: (record: SessionRecord) => Promise<boolean>
   ) {
     super(leaf);
   }
@@ -291,17 +296,13 @@ export class DashboardView extends ItemView {
               -Number(this.period)
             );
 
-      chartArea.createEl("h4", {
-        text: "日別解答回数",
-      });
+      const attemptsChart = chartArea.createDiv({ cls: "kokushi-dashboard-chart" });
+      attemptsChart.createEl("h4", { text: "日別解答回数" });
+      this.renderBarChart(attemptsChart, days);
 
-      this.renderBarChart(chartArea, days);
-
-      chartArea.createEl("h4", {
-        text: "日別正答率",
-      });
-
-      this.renderLineChart(chartArea, days);
+      const accuracyChart = chartArea.createDiv({ cls: "kokushi-dashboard-chart" });
+      accuracyChart.createEl("h4", { text: "日別正答率" });
+      this.renderLineChart(accuracyChart, days);
     };
 
     periodSelect.addEventListener(
@@ -321,6 +322,7 @@ export class DashboardView extends ItemView {
     );
 
     updateCharts();
+    void renderSessionHistory(root.createDiv(), this.app, this.sessionService, this.onRetrySession);
 
     // ----------------------------------------
     // 最近の解答履歴
@@ -421,10 +423,11 @@ export class DashboardView extends ItemView {
       cls: "kokushi-dashboard-chart-scroll",
     });
 
-    const width = Math.max(
-      480,
-      days.length * 24 + 60
-    );
+    const width = Math.max(360, days.length * 14 + 60);
+    if (days.length > 30) {
+      wrapper.addClass("is-wide");
+      wrapper.setCssProps({ "--kokushi-chart-width": `${width}px` });
+    }
 
     const height = 190;
 
