@@ -1,10 +1,9 @@
 {
   "id": "obsidian-kokushi",
   "name": "Kokushi",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.7.2",
   "description": "医師国家試験の過去問演習プラグイン",
   "author": "Local",
   "isDesktopOnly": false
 }
-

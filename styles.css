@@ -29,13 +29,71 @@ If your plugin does not need CSS, delete this file.
   font-weight: 700;
 }
 
-.kokushi-header button {
+.kokushi-header-actions {
+  display: flex;
   flex-shrink: 0;
+  gap: 8px;
+}
+
+.kokushi-copy-target {
+  position: fixed;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .kokushi-question {
   margin-bottom: 24px;
+  overflow-x: auto;
 }
+
+.kokushi-question img {
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.kokushi-question .image-embed {
+  width: auto;
+  height: auto;
+  max-width: none;
+}
+
+.kokushi-question img.kokushi-image-landscape {
+  width: 300px !important;
+  height: auto !important;
+}
+
+.kokushi-question img.kokushi-image-portrait {
+  width: auto !important;
+  height: 300px !important;
+}
+
+.kokushi-image-gallery {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.kokushi-image-gallery > * {
+  flex: none;
+}
+
+.kokushi-image-gallery :is(p, .el-p) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+}
+
+.kokushi-image-gallery :is(p, .el-p) > br {
+  display: none;
+}
+
 
 .kokushi-question-table {
   max-width: 100%;
@@ -704,4 +762,10 @@ If your plugin does not need CSS, delete this file.
   .kokushi-dashboard-chart-scroll {
     padding: 4px;
   }
+}
+
+.kokushi-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
