@@ -1,4 +1,4 @@
-import { TFile, TFolder, Vault } from "obsidian";
+import { TFile, TFolder, Vault, WorkspaceLeaf } from "obsidian";
 import { ATTEMPTS_FOLDER, PATHS, QUESTION_ID_PATTERN } from "../constants";
 import { SessionRecord, SessionResult } from "../types";
 import { ensureFolder } from "./VaultFolder";
@@ -22,14 +22,33 @@ const SESSION_ID = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z_[a-f0-9]{16}$/;
 
 export class SessionService {
   private pending: Promise<void> = Promise.resolve();
-  private activeDrafts = new Set<string>();
+  private activeDrafts = new Map<string, WorkspaceLeaf>();
+  private discarding = new Set<string>();
+  private discarded = new Set<string>();
 
-  constructor(private vault: Vault) {}
+  constructor(
+    private vault: Vault,
+    private discardAttempts: (id: string) => Promise<void>,
+    private trashFile: (file: TFile) => Promise<void>,
+  ) {}
 
-  claimDraft(id: string): boolean {
-    if (this.activeDrafts.has(id)) return false;
-    this.activeDrafts.add(id);
+  isDiscarded(id: string): boolean {
+    return this.discarding.has(id) || this.discarded.has(id);
+  }
+
+  claimDraft(id: string, leaf: WorkspaceLeaf): boolean {
+    if (this.activeDrafts.has(id) || this.isDiscarded(id)) return false;
+    this.activeDrafts.set(id, leaf);
     return true;
+  }
+
+  getActiveLeaf(id: string): WorkspaceLeaf | undefined {
+    return this.activeDrafts.get(id);
+  }
+
+  getStatus(record: SessionRecord): SessionSummary["status"] {
+    if (record.status !== "in-progress") return "completed";
+    return this.activeDrafts.has(record.id) ? "active" : "interrupted";
   }
 
   releaseDraft(id: string): void {
@@ -40,6 +59,7 @@ export class SessionService {
     if (!SESSION_ID.test(session.id)) throw new Error("演習履歴IDが不正です");
 
     const task = this.pending.then(async () => {
+      if (this.discarded.has(session.id)) throw new Error("演習履歴は破棄されています");
       await ensureFolder(this.vault, ATTEMPTS_FOLDER);
       await ensureFolder(this.vault, PATHS.sessions);
       const path = `${PATHS.sessions}/${session.id}.json`;
@@ -54,6 +74,66 @@ export class SessionService {
     });
     this.pending = task.catch(() => {});
     return task;
+  }
+
+  async discard(id: string, includeAttempts: boolean): Promise<void> {
+    if (!SESSION_ID.test(id) || this.activeDrafts.has(id) || this.discarding.has(id)) {
+      throw new Error("この演習は破棄できません");
+    }
+    this.discarding.add(id);
+
+    const task = this.pending.then(async () => {
+      const path = `${PATHS.sessions}/${id}.json`;
+      const file = this.vault.getAbstractFileByPath(path);
+      if (!(file instanceof TFile)) throw new Error("演習履歴が見つかりません");
+
+      if (!includeAttempts) {
+        await this.trashFile(file);
+        return;
+      }
+
+      // 再起動時にも処理を続けられるよう、先に削除予定のファイル名へ移す。
+      const staged = `${PATHS.sessions}/${id}.discarding.json`;
+      if (this.vault.getAbstractFileByPath(staged)) throw new Error("削除処理がすでに登録されています");
+      await this.vault.rename(file, staged);
+      try {
+        await this.discardAttempts(id);
+      } catch (error) {
+        await this.vault.rename(file, path);
+        throw error;
+      }
+      await this.finishDiscard(file);
+    });
+    this.pending = task.catch(() => {});
+    try {
+      await task;
+      this.discarded.add(id);
+    } finally {
+      this.discarding.delete(id);
+    }
+  }
+
+  async recoverDiscards(): Promise<void> {
+    const folder = this.vault.getAbstractFileByPath(PATHS.sessions);
+    if (!(folder instanceof TFolder)) return;
+
+    for (const file of [...folder.children]) {
+      if (!(file instanceof TFile) || file.extension !== "json" || !file.basename.endsWith(".discarding")) continue;
+      const id = file.basename.slice(0, -".discarding".length);
+      if (!SESSION_ID.test(id)) continue;
+      await this.discardAttempts(id);
+      this.discarded.add(id);
+      await this.finishDiscard(file);
+    }
+  }
+
+  private async finishDiscard(file: TFile): Promise<void> {
+    try {
+      await this.trashFile(file);
+    } catch (error) {
+      // 一覧からは除外済み。次の起動時にファイルの破棄を再試行する。
+      console.error("[Kokushi] Discard cleanup error", error);
+    }
   }
 
   async getSession(id: string): Promise<SessionRecord | null> {
@@ -108,8 +188,7 @@ export class SessionService {
           startedAt: record.startedAt,
           total: record.questions.length,
           result: record.result,
-          status: record.status !== "in-progress" ? "completed"
-            : this.activeDrafts.has(record.id) ? "active" : "interrupted",
+          status: this.getStatus(record),
         });
       } catch {
         invalid++;

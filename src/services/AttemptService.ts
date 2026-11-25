@@ -45,6 +45,26 @@ export class AttemptService {
     return task;
   }
 
+  async discardSession(sessionId: string): Promise<void> {
+    const task = this.queue.then(async () => {
+      const file = this.app.vault.getAbstractFileByPath(PATHS.attempts);
+      if (file === null) return;
+      if (!(file instanceof TFile)) throw new Error("解答履歴の保存先がファイルではありません");
+
+      await this.app.vault.process(file, text => text.replace(/[^\n]+(?:\n|$)/g, line => {
+        try {
+          const value: unknown = JSON.parse(line);
+          return typeof value === "object" && value !== null && "sessionId" in value &&
+            value.sessionId === sessionId ? "" : line;
+        } catch {
+          return line;
+        }
+      }));
+    });
+    this.queue = task.catch(() => {});
+    await task;
+  }
+
   async getAttempts(): Promise<Attempt[]> {
     const file =
       this.app.vault.getAbstractFileByPath(
