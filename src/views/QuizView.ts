@@ -23,6 +23,7 @@ import { AttemptService } from "../services/AttemptService";
 import { SessionService } from "../services/SessionService";
 import { QUESTION_ID_PATTERN } from "../constants";
 import { renderDraftList } from "./DraftList";
+import { DiscardSessionModal } from "./DiscardSessionModal";
 import { renderQuestionStudy } from "./QuestionStudyPanel";
 import { arrangeQuestionImages, copyQuestionText, formatQuestionCopy } from "./questionMedia";
 
@@ -777,9 +778,9 @@ export class QuizView extends ItemView {
     this.saving = false;
   }
 
-  private resetSession(): void {
+  private resetSession(retainClaim?: string): void {
     this.cancelDraftTimer();
-    if (this.session) this.sessionService.releaseDraft(this.session.id);
+    if (this.session && this.session.id !== retainClaim) this.sessionService.releaseDraft(this.session.id);
     this.session = null;
     this.sessionCompleted = false;
     this.draftDirty = false;
@@ -899,7 +900,8 @@ export class QuizView extends ItemView {
   }
 
   public async resumeDraft(id: string): Promise<boolean> {
-    if (this.session?.id === id || !await this.leaveSession()) return false;
+    if (this.session?.id === id && !this.sessionCompleted) return false;
+    if (!await this.leaveSession()) return false;
 
     if (!this.sessionService.claimDraft(id, this.leaf)) {
       new Notice("この演習は別のペインで開いています。");
@@ -911,7 +913,10 @@ export class QuizView extends ItemView {
     try {
       const record = await this.sessionService.getSession(id);
       if (this.closing) return false;
-      if (record?.status !== "in-progress" || record.currentIndex === undefined) {
+      const resumeIndex = record?.status === "in-progress"
+        ? record.currentIndex
+        : record?.questions.findIndex(question => question.grade === null);
+      if (!record || resumeIndex === undefined || resumeIndex < 0) {
         new Notice("再開できる演習が見つかりませんでした。");
         return false;
       }
@@ -930,7 +935,20 @@ export class QuizView extends ItemView {
         questions.push(question);
       }
 
-      this.resetSession();
+      if (record.status !== "in-progress") {
+        const write = this.sessionService.save({
+          ...record,
+          status: "in-progress",
+          currentIndex: resumeIndex,
+          recordedAt: new Date().toISOString(),
+        });
+        this.pendingOperation = write;
+        await write;
+        this.pendingOperation = null;
+        if (this.closing) return false;
+      }
+
+      this.resetSession(id);
       const { startedAt, scope, sourceSessionId } = record;
       this.session = { id, startedAt, scope, sourceSessionId };
       adopted = true;
@@ -944,15 +962,16 @@ export class QuizView extends ItemView {
           graded: item.grade,
         });
       });
-      this.index = record.currentIndex;
+      this.index = resumeIndex;
       this.restoreState(this.index);
       await this.renderQuiz(true);
       return true;
     } catch (error) {
       console.error("[Kokushi] Draft resume error", error);
-      new Notice("中断した演習を読み込めませんでした。");
+      new Notice("演習を再開できませんでした。");
       return false;
     } finally {
+      this.pendingOperation = null;
       if (!adopted) this.sessionService.releaseDraft(id);
       this.saving = false;
     }
@@ -1219,7 +1238,8 @@ export class QuizView extends ItemView {
   // ========================================
 
   private async renderQuiz(
-    resetScroll = true
+    resetScroll = true,
+    scrollToBottom = false,
   ): Promise<void> {
     const container = this.contentEl;
     this.memoEditor = null;
@@ -1267,22 +1287,6 @@ export class QuizView extends ItemView {
     const headerActions = header.createDiv({ cls: "kokushi-header-actions" });
     const copyButton = headerActions.createEl("button", { type: "button", text: "コピー" });
     copyButton.disabled = true;
-
-    const backButton = headerActions.createEl("button", {
-      text: "戻る",
-      attr: { "aria-label": "出題範囲に戻る" },
-    });
-    backButton.type = "button";
-
-    backButton.disabled = this.saving;
-
-    backButton.onclick = async () => {
-      if (!await this.leaveSession()) return;
-
-      this.questions = [];
-      this.resetSession();
-      await this.renderScopeSelection();
-    };
 
     // ========================================
     // 問題文
@@ -1447,10 +1451,7 @@ export class QuizView extends ItemView {
         await this.submitAnswer(question);
       };
     } else {
-      this.renderResult(
-        container,
-        question
-      );
+      this.memoEditor = this.renderResult(container, question);
     }
 
     // ========================================
@@ -1463,7 +1464,14 @@ export class QuizView extends ItemView {
     // 描画完了後のスクロール位置調整
     // ========================================
 
-    if (resetScroll) {
+    if (scrollToBottom) {
+      await this.memoEditor;
+      const scroll = (): void => {
+        if (!this.closing && container.contains(questionEl)) container.scrollTop = container.scrollHeight;
+      };
+      scroll();
+      (container.ownerDocument.defaultView ?? window).requestAnimationFrame(scroll);
+    } else if (resetScroll) {
       this.resetScrollAfterRender();
     } else {
       // 「わからない」切替・採点などの再描画
@@ -1705,8 +1713,7 @@ export class QuizView extends ItemView {
       this.scheduleDraftSave(true);
       if (this.closing) return;
 
-      // 採点後は現在のスクロール位置を維持
-      await this.renderQuiz(false);
+      await this.renderQuiz(false, true);
     } catch (error) {
       this.pendingOperation = null;
       console.error(
@@ -1732,8 +1739,8 @@ export class QuizView extends ItemView {
   private renderResult(
     container: HTMLElement,
     question: Question
-  ): void {
-    if (this.graded === null) return;
+  ): Promise<(() => Promise<boolean>) | undefined> | null {
+    if (this.graded === null) return null;
 
     const resultEl = container.createDiv({
       cls: `kokushi-result is-${this.graded}`,
@@ -1772,7 +1779,7 @@ export class QuizView extends ItemView {
     }
 
     const studyPanel = resultEl.createDiv({ cls: "kokushi-question-study" });
-    this.memoEditor = renderQuestionStudy(studyPanel, this.app, question, this.studyService);
+    return renderQuestionStudy(studyPanel, this.app, question, this.studyService);
   }
 
   // ========================================
@@ -1841,11 +1848,19 @@ export class QuizView extends ItemView {
     // 演習結果を確認
     // ----------------------------------------
 
-    const resultButton =
-      container.createEl("button", {
-        text: "演習結果を見る",
-        cls: "kokushi-wide-action kokushi-view-results",
-      });
+    const scopeButton = container.createEl("button", {
+      type: "button",
+      text: "出題範囲の選択に戻る",
+      cls: "kokushi-wide-action",
+    });
+    scopeButton.disabled = this.saving;
+    scopeButton.onclick = () => { void this.openScopeFromDashboard(); };
+
+    const resultButton = container.createEl("button", {
+      type: "button",
+      text: "演習を終了する",
+      cls: "kokushi-wide-action kokushi-view-results mod-warning",
+    });
 
     resultButton.disabled = this.saving;
 
@@ -1985,9 +2000,15 @@ export class QuizView extends ItemView {
   ): void {
     container.empty();
 
-    container.createEl("h2", {
-      text: "演習結果",
-    });
+    const heading = container.createDiv({ cls: "kokushi-section-heading" });
+    heading.createEl("h2", { text: "演習結果" });
+    const dashboard = heading.createEl("button", { type: "button", text: "ダッシュボードを見る" });
+    dashboard.onclick = () => {
+      void this.openDashboard().catch(error => {
+        console.error("[Kokushi] Open dashboard error", error);
+        new Notice("ダッシュボードを開けませんでした。");
+      });
+    };
 
     const total = this.questions.length;
 
@@ -2229,21 +2250,6 @@ export class QuizView extends ItemView {
     });
 
     // ----------------------------------------
-    // 最後の問題に戻る
-    // ----------------------------------------
-
-    const previousButton =
-      actions.createEl("button", {
-        text: "← 最後の問題に戻る",
-      });
-
-    previousButton.onclick = () => {
-      void this.moveToQuestion(
-        total - 1
-      );
-    };
-
-    // ----------------------------------------
     // 同じ問題セットで再演習
     // ----------------------------------------
 
@@ -2268,11 +2274,20 @@ export class QuizView extends ItemView {
         cls: "mod-cta",
       });
 
-    scopeButton.onclick = () => {
-      this.questions = [];
-      this.resetSession();
-      void this.renderScopeSelection();
-    };
+    scopeButton.onclick = () => { void this.openScopeFromDashboard(); };
+
+    const session = this.session;
+    if (session) {
+      const discard = actions.createEl("button", {
+        type: "button", text: "演習結果を破棄", cls: "mod-warning",
+      });
+      discard.onclick = () => {
+        new DiscardSessionModal(this.app, async includeAttempts => {
+          await this.sessionService.discard(session.id, includeAttempts);
+          if (this.session === session) await this.openScopeFromDashboard();
+        }, "演習結果を破棄").open();
+      };
+    }
   }
 
   private async leaveDiscardedSession(): Promise<boolean> {

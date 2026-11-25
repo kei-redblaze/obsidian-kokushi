@@ -48,7 +48,10 @@ export async function renderQuestionStudy(
         heading.append(headingActions);
       }
       remove.disabled = selected.size === 0;
-      if (relatedNotes.length === 0) return;
+      if (relatedNotes.length === 0) {
+        links.createEl("p", { text: "関連づけられているノートはありません" });
+        return;
+      }
 
       const list = links.createEl("ul");
       for (const path of relatedNotes) {

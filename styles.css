@@ -227,6 +227,7 @@ If your plugin does not need CSS, delete this file.
 
 .kokushi-study-memo {
   --kokushi-memo-border: var(--background-modifier-border-hover, var(--background-modifier-border));
+  --kokushi-memo-border: color-mix(in srgb, var(--background-modifier-border-hover, var(--background-modifier-border)) 85%, var(--text-normal));
   min-height: 4.5rem;
   padding: 8px 10px;
   resize: vertical;
@@ -883,11 +884,26 @@ If your plugin does not need CSS, delete this file.
   flex-shrink: 0;
 }
 
-.kokushi-history-actions .mod-warning {
+.kokushi-history-actions .mod-warning,
+.kokushi-session-actions .mod-warning,
+.kokushi-view-results.mod-warning {
   background-color: var(--background-modifier-error);
   color: var(--text-on-accent);
 }
 
-.kokushi-history-actions .mod-warning:hover:not(:disabled) {
+.kokushi-history-actions .mod-warning:hover:not(:disabled),
+.kokushi-session-actions .mod-warning:hover:not(:disabled),
+.kokushi-view-results.mod-warning:hover:not(:disabled) {
   background-color: var(--background-modifier-error-hover, var(--background-modifier-error));
+}
+
+.kokushi-note-modal-container.modal-container {
+  align-items: flex-start;
+  padding-top: calc(var(--kokushi-note-viewport-top, 0px) + 12px);
+}
+
+.kokushi-note-modal.modal {
+  max-height: calc(var(--kokushi-note-viewport-height, 100dvh) - 24px);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
 }

@@ -1,4 +1,4 @@
-import { App, FuzzySuggestModal, Modal, TFile } from "obsidian";
+import { App, FuzzySuggestModal, Modal, Platform, TFile } from "obsidian";
 
 export class StudyNotePicker extends FuzzySuggestModal<TFile> {
   constructor(app: App, private notes: TFile[], private choose: (file: TFile) => void) {
@@ -20,6 +20,7 @@ export class StudyNotePicker extends FuzzySuggestModal<TFile> {
 }
 
 export class CreateStudyNoteModal extends Modal {
+  private stopFitting: (() => void) | null = null;
   constructor(
     app: App,
     private create: (title: string) => Promise<TFile>,
@@ -64,10 +65,39 @@ export class CreateStudyNoteModal extends Modal {
         submit.disabled = false;
       }
     };
-    input.focus();
+    if (Platform.isIosApp && Platform.isTablet) {
+      this.fitTabletViewport();
+      input.focus({ preventScroll: true });
+    } else {
+      input.focus();
+    }
+  }
+
+  private fitTabletViewport(): void {
+    const view = this.modalEl.ownerDocument.defaultView ?? window;
+    const viewport = view.visualViewport;
+    this.containerEl.addClass("kokushi-note-modal-container");
+    this.modalEl.addClass("kokushi-note-modal");
+    const fit = (): void => {
+      this.containerEl.setCssProps({
+        "--kokushi-note-viewport-top": `${Math.max(0, viewport?.offsetTop ?? 0)}px`,
+        "--kokushi-note-viewport-height": `${viewport?.height || view.innerHeight}px`,
+      });
+    };
+    fit();
+    view.addEventListener("resize", fit);
+    viewport?.addEventListener("resize", fit);
+    viewport?.addEventListener("scroll", fit);
+    this.stopFitting = () => {
+      view.removeEventListener("resize", fit);
+      viewport?.removeEventListener("resize", fit);
+      viewport?.removeEventListener("scroll", fit);
+    };
   }
 
   onClose(): void {
+    this.stopFitting?.();
+    this.stopFitting = null;
     this.contentEl.empty();
   }
 }

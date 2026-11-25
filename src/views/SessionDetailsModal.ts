@@ -86,7 +86,10 @@ export class SessionDetailsModal extends Modal {
       if (status === "interrupted") {
         addAction("再開", () => this.actions.resume(this.record.id), "mod-cta");
       } else {
-        addAction("このセットで再演習", () => this.actions.retry(this.record, "all"), "mod-cta");
+        if (questions.some(question => question.grade === null)) {
+          addAction("再開", () => this.actions.resume(this.record.id), "mod-cta");
+        }
+        addAction("このセットで再演習", () => this.actions.retry(this.record, "all"));
         if (result.incorrect > 0) {
           addAction("この回の誤答を再演習", () => this.actions.retry(this.record, "incorrect"));
         }

@@ -1,12 +1,16 @@
 import { App, Modal } from "obsidian";
 
 export class DiscardSessionModal extends Modal {
-  constructor(app: App, private onDiscard: (includeAttempts: boolean) => Promise<void>) {
+  constructor(
+    app: App,
+    private onDiscard: (includeAttempts: boolean) => Promise<void>,
+    private title = "演習履歴を破棄",
+  ) {
     super(app);
   }
 
   onOpen(): void {
-    this.setTitle("演習履歴を破棄");
+    this.setTitle(this.title);
     const root = this.contentEl;
     const explanation = root.createEl("p", { text: "この演習の履歴を削除します。" });
     const label = root.createEl("label", { cls: "kokushi-study-check" });
