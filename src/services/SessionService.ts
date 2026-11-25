@@ -1,6 +1,7 @@
 import { TFile, TFolder, Vault, WorkspaceLeaf } from "obsidian";
-import { ATTEMPTS_FOLDER, PATHS, QUESTION_ID_PATTERN } from "../constants";
+import { ATTEMPTS_FOLDER, PATHS } from "../constants";
 import { SessionRecord, SessionResult } from "../types";
+import { isQuestionReference, questionKey } from "./QuestionIdentity";
 import { ensureFolder } from "./VaultFolder";
 
 export interface SessionSummary {
@@ -149,14 +150,14 @@ export class SessionService {
 
     for (const file of this.getFiles()) {
       if (this.activeDrafts.has(file.basename)) continue;
-      let record: SessionRecord;
+      let record: SessionRecord | null;
       try {
         record = await this.readSession(file);
       } catch {
         // 読み込めない行はダッシュボードの履歴で通知する。
         continue;
       }
-      if (record.status === "in-progress" && record.currentIndex !== undefined) {
+      if (record?.status === "in-progress" && record.currentIndex !== undefined) {
         drafts.push({
           id: record.id,
           recordedAt: record.recordedAt,
@@ -181,6 +182,7 @@ export class SessionService {
     for (const file of this.getFiles()) {
       try {
         const record = await this.readSession(file);
+        if (!record) continue;
         if (sessions.length === limit) return { sessions, invalid, hasMore: true };
 
         sessions.push({
@@ -212,8 +214,11 @@ export class SessionService {
       .sort((a, b) => b.name.localeCompare(a.name));
   }
 
-  private async readSession(file: TFile): Promise<SessionRecord> {
+  private async readSession(file: TFile): Promise<SessionRecord | null> {
     const value: unknown = JSON.parse(await this.vault.cachedRead(file));
+    if (typeof value === "object" && value !== null && "schemaVersion" in value && value.schemaVersion === 1) {
+      return null;
+    }
     if (!isSessionRecord(value, file.basename)) throw new Error("演習履歴の形式が不正です");
     return value;
   }
@@ -224,29 +229,29 @@ function isSessionRecord(value: unknown, id: string): value is SessionRecord {
   const { schemaVersion, startedAt, recordedAt, questions, result, scope, status, currentIndex, sourceSessionId } =
     value as Partial<SessionRecord>;
   if (
-    schemaVersion !== 1 ||
+    schemaVersion !== 2 ||
     (value as Partial<SessionRecord>).id !== id ||
     typeof startedAt !== "string" ||
     !Number.isFinite(Date.parse(startedAt)) ||
     typeof recordedAt !== "string" ||
     !Number.isFinite(Date.parse(recordedAt)) ||
-    (status !== undefined && status !== "in-progress" && status !== "completed") ||
+    (status !== "in-progress" && status !== "completed") ||
     (sourceSessionId !== undefined && (typeof sourceSessionId !== "string" || !SESSION_ID.test(sourceSessionId))) ||
     !Array.isArray(questions) ||
     questions.length === 0 ||
     !questions.every(isSessionAnswer) ||
+    new Set(questions.map(questionKey)).size !== questions.length ||
     (status === "in-progress" && (
       currentIndex === undefined || !Number.isInteger(currentIndex) ||
       currentIndex < 0 || currentIndex >= questions.length
     )) ||
     typeof scope !== "object" || scope === null ||
-    (scope.exams !== null && (!Array.isArray(scope.exams) || !scope.exams.every(exam => typeof exam === "string"))) ||
+    (scope.sources !== null && (!Array.isArray(scope.sources) || !scope.sources.every(source => typeof source === "string"))) ||
     (scope.order !== "sequential" && scope.order !== "random") ||
-    (scope.target !== "all" && scope.target !== "unanswered" && scope.target !== "incorrect") ||
-    (scope.targets !== undefined && (!Array.isArray(scope.targets) ||
+    (!Array.isArray(scope.targets) ||
       scope.targets.length < 1 || scope.targets.length > 3 ||
       new Set(scope.targets).size !== scope.targets.length ||
-      !scope.targets.every(target => target === "correct" || target === "incorrect" || target === "unanswered"))) ||
+      !scope.targets.every(target => target === "correct" || target === "incorrect" || target === "unanswered")) ||
     typeof result !== "object" || result === null
   ) return false;
 
@@ -258,10 +263,9 @@ function isSessionRecord(value: unknown, id: string): value is SessionRecord {
 }
 
 function isSessionAnswer(value: unknown): value is SessionRecord["questions"][number] {
-  if (typeof value !== "object" || value === null) return false;
-  const { id, selected, grade, unknown } = value as Partial<SessionRecord["questions"][number]>;
-  return typeof id === "string" && QUESTION_ID_PATTERN.test(id) &&
-    Array.isArray(selected) && selected.every(item => typeof item === "string") &&
+  if (!isQuestionReference(value)) return false;
+  const { selected, grade, unknown } = value as Partial<SessionRecord["questions"][number]>;
+  return Array.isArray(selected) && selected.every(item => typeof item === "string") &&
     typeof unknown === "boolean" &&
     (grade === null || grade === "correct" || grade === "incorrect" || grade === "excluded");
 }

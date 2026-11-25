@@ -1,5 +1,6 @@
 import { App, Modal, Notice } from "obsidian";
 import { HistoryRetryMode, SessionRecord } from "../types";
+import { sourceLabel } from "../services/QuestionIdentity";
 import { SessionService } from "../services/SessionService";
 import { DiscardSessionModal } from "./DiscardSessionModal";
 import { formatSessionDate } from "./sessionFormatting";
@@ -45,15 +46,13 @@ export class SessionDetailsModal extends Modal {
   }
 
   onOpen(): void {
-    const { startedAt, scope, result, questions } = this.record;
+    const { startedAt, result, questions } = this.record;
     this.setTitle("演習履歴の詳細");
     const root = this.contentEl;
     root.createEl("p", { text: `開始日時 ${formatSessionDate(startedAt)}` });
 
-    const sources = scope.exams ?? [...new Set(questions.map(question => question.id.replace(/[A-F].*$/, "")))];
-    root.createEl("p", {
-      text: `出典 ${sources.map(exam => `第${exam}回`).join("、")}`,
-    });
+    const sources = [...new Set(questions.map(question => sourceLabel(question.source)))];
+    root.createEl("p", { text: `出典 ${sources.join("、")}` });
     const percentage = result.accuracy === null ? "—" : `${result.accuracy.toFixed(1)}%`;
     root.createEl("p", {
       text: `全${questions.length}問、正解${result.correct}問、不正解${result.incorrect}問、` +
@@ -111,13 +110,14 @@ export class SessionDetailsModal extends Modal {
     const wrapper = root.createDiv({ cls: "kokushi-session-table-wrapper" });
     const table = wrapper.createEl("table", { cls: "kokushi-session-table" });
     const header = table.createEl("thead").createEl("tr");
-    for (const label of ["問題番号", "自分の解答", "採点結果"]) {
+    for (const label of ["出典", "問題番号", "自分の解答", "採点結果"]) {
       header.createEl("th", { text: label, attr: { scope: "col" } });
     }
 
     const body = table.createEl("tbody");
     for (const question of questions) {
       const row = body.createEl("tr");
+      row.createEl("td", { text: sourceLabel(question.source) });
       row.createEl("td", { text: question.id });
       const selected = question.unknown ? "わからない" : question.selected.join(", ") || "—";
       row.createEl("td", { text: selected });

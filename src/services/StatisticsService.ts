@@ -1,13 +1,8 @@
 
-import { App, TFile } from "obsidian";
-import { DASHBOARD_HISTORY_LIMIT, PATHS } from "../constants";
-
-export type DashboardAttempt = {
-  id: string;
-  timestamp: string;
-  selected: string[];
-  correct: boolean | null;
-};
+import { DASHBOARD_HISTORY_LIMIT } from "../constants";
+import { Attempt } from "../types";
+import { AttemptService } from "./AttemptService";
+import { questionKey } from "./QuestionIdentity";
 
 export type DailyStatistics = {
   date: string;
@@ -34,38 +29,10 @@ export type DashboardStatistics = {
   cumulativeAccuracy: number | null;
 
   daily: DailyStatistics[];
-  recent: DashboardAttempt[];
+  recent: Attempt[];
   invalidLines: number;
   availableIds: Set<string>;
 };
-
-function isAttempt(
-  value: unknown
-): value is DashboardAttempt {
-  if (
-    typeof value !== "object" ||
-    value === null
-  ) {
-    return false;
-  }
-
-  const record = value as Record<string, unknown>;
-
-  return (
-    typeof record.id === "string" &&
-    typeof record.timestamp === "string" &&
-    !Number.isNaN(Date.parse(record.timestamp)) &&
-    Array.isArray(record.selected) &&
-    record.selected.every(
-      item => typeof item === "string"
-    ) &&
-    (
-      record.correct === true ||
-      record.correct === false ||
-      record.correct === null
-    )
-  );
-}
 
 function dateKey(date: Date): string {
   const parts = new Intl.DateTimeFormat(
@@ -100,24 +67,25 @@ function addDays(
 }
 
 export class StatisticsService {
-  constructor(private app: App) {}
+  constructor(private attemptService: AttemptService) {}
 
   async load(
     questionIds: string[]
   ): Promise<DashboardStatistics> {
     const availableIds = new Set(questionIds);
-    const { attempts, invalidLines } = await this.readAttempts();
+    const { attempts, invalidLines } = await this.attemptService.readAttempts();
 
     // 問題ごとの最新記録
     // JSONLは記録順に追記される前提
     const latest = new Map<
       string,
-      DashboardAttempt
+      Attempt
     >();
 
     for (const attempt of attempts) {
-      if (availableIds.has(attempt.id)) {
-        latest.set(attempt.id, attempt);
+      const key = questionKey(attempt);
+      if (availableIds.has(key)) {
+        latest.set(key, attempt);
       }
     }
 
@@ -256,46 +224,12 @@ export class StatisticsService {
       availableIds,
     };
   }
-  async getAttemptHistory(): Promise<{ attempts: DashboardAttempt[]; invalidLines: number }> {
-    const { attempts, invalidLines } = await this.readAttempts();
+  async getAttemptHistory(): Promise<{ attempts: Attempt[]; invalidLines: number }> {
+    const { attempts, invalidLines } = await this.attemptService.readAttempts();
     return { attempts: this.newestFirst(attempts), invalidLines };
   }
 
-  private newestFirst(attempts: DashboardAttempt[]): DashboardAttempt[] {
+  private newestFirst(attempts: Attempt[]): Attempt[] {
     return [...attempts].reverse().sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
   }
-
-  private async readAttempts(): Promise<{ attempts: DashboardAttempt[]; invalidLines: number }> {
-    const attempts: DashboardAttempt[] = [];
-
-    let invalidLines = 0;
-
-    const file = this.app.vault.getAbstractFileByPath(
-      PATHS.attempts
-    );
-
-    if (file instanceof TFile) {
-      const content =
-        await this.app.vault.cachedRead(file);
-
-      for (const line of content.split(/\r?\n/)) {
-        if (!line.trim()) continue;
-
-        try {
-          const parsed: unknown = JSON.parse(line);
-
-          if (isAttempt(parsed)) {
-            attempts.push(parsed);
-          } else {
-            invalidLines++;
-          }
-        } catch {
-          invalidLines++;
-        }
-      }
-    }
-
-    return { attempts, invalidLines };
-  }
-
 }

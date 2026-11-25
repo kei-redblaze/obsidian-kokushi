@@ -2,14 +2,12 @@
 import {
   App,
   TFile,
-  parseYaml,
 } from "obsidian";
 
+import { parseDocument } from "yaml";
 import { Question, QuestionType } from "../types";
-import {
-  PATHS,
-  QUESTION_ID_PATTERN,
-} from "../constants";
+import { PATHS } from "../constants";
+import { isQuestionNumber, questionKey, readYamlQuestionNumber } from "./QuestionIdentity";
 
 export class QuestionService {
   constructor(private app: App) {}
@@ -26,7 +24,7 @@ export class QuestionService {
     const questions: Question[] = [];
 
     for (const file of files) {
-      if (!QUESTION_ID_PATTERN.test(file.basename)) {
+      if (!isQuestionNumber(file.basename)) {
         continue;
       }
 
@@ -52,18 +50,20 @@ export class QuestionService {
         const yamlText =
           await this.app.vault.cachedRead(yamlFile);
 
-        const data: unknown = parseYaml(yamlText);
+        const yaml = parseDocument(yamlText);
+        const data: unknown = yaml.toJS();
 
-        if (!this.isValidMetadata(data)) {
+        if (yaml.errors.length || !this.isValidMetadata(data)) {
           throw new Error("YAML形式が不正です");
         }
 
-        if (data.id !== file.basename) {
+        if (readYamlQuestionNumber(yaml.get("id", true)) !== file.basename) {
           throw new Error("問題IDが一致しません");
         }
 
         questions.push({
-          id: data.id,
+          id: file.basename,
+          source: file.path.slice(PATHS.questions.length + 1).split("/").slice(0, -1)[0] ?? "",
           type: data.type,
           answer: data.answer,
           excluded: data.excluded === true,
@@ -78,15 +78,29 @@ export class QuestionService {
       }
     }
 
-    return questions.sort((a, b) =>
-      this.compareIds(a.id, b.id)
+    const byKey = new Map<string, Question>();
+    const duplicate = new Set<string>();
+    for (const question of questions) {
+      const key = questionKey(question);
+      if (duplicate.has(key)) continue;
+      if (byKey.has(key)) {
+        console.warn("[Kokushi] Duplicate question", byKey.get(key)?.path, question.path);
+        byKey.delete(key);
+        duplicate.add(key);
+      } else {
+        byKey.set(key, question);
+      }
+    }
+
+    return [...byKey.values()].sort((a, b) =>
+      a.source.localeCompare(b.source, "ja", { numeric: true }) ||
+      a.id.localeCompare(b.id, "ja", { numeric: true })
     );
   }
 
   private isValidMetadata(
     value: unknown
   ): value is {
-    id: string;
     type: QuestionType;
     answer: string[][];
     excluded?: boolean;
@@ -97,11 +111,6 @@ export class QuestionService {
     ) return false;
 
     const data = value as Record<string, unknown>;
-
-    if (
-      typeof data.id !== "string" ||
-      !QUESTION_ID_PATTERN.test(data.id)
-    ) return false;
 
     if (
       data.type !== "single" &&
@@ -149,21 +158,6 @@ export class QuestionService {
     return answers.every(set =>
       set.length === 1 &&
       /^\d+$/.test(set[0])
-    );
-  }
-
-  private compareIds(a: string, b: string): number {
-    const matchA = a.match(QUESTION_ID_PATTERN);
-    const matchB = b.match(QUESTION_ID_PATTERN);
-
-    if (!matchA || !matchB) {
-      return a.localeCompare(b);
-    }
-
-    return (
-      Number(matchA[1]) - Number(matchB[1]) ||
-      matchA[2].localeCompare(matchB[2]) ||
-      Number(matchA[3]) - Number(matchB[3])
     );
   }
 }

@@ -9,8 +9,12 @@ export type GradeResult =
   | "incorrect"
   | "excluded";
 
-export interface Question {
+export interface QuestionReference {
   id: string;
+  source: string;
+}
+
+export interface Question extends QuestionReference {
   type: QuestionType;
   answer: string[][];
   excluded: boolean;
@@ -19,8 +23,7 @@ export interface Question {
   path: string;
 }
 
-export interface Attempt {
-  id: string;
+export interface Attempt extends QuestionReference {
   sessionId?: string;
   timestamp: string;
   selected: string[];
@@ -38,27 +41,24 @@ export interface SessionResult {
 export type PracticeTarget = "correct" | "incorrect" | "unanswered";
 
 export interface SessionRecord {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: string;
   startedAt: string;
   recordedAt: string;
-  // v0.1.10 の履歴には status がなく、完了済みとして扱う。
-  status?: "in-progress" | "completed";
+  status: "in-progress" | "completed";
   currentIndex?: number;
   sourceSessionId?: string;
   scope: {
-    exams: string[] | null;
+    sources: string[] | null;
     order: "sequential" | "random";
-    target: "all" | "unanswered" | "incorrect";
-    targets?: PracticeTarget[];
+    targets: PracticeTarget[];
   };
   result: SessionResult;
-  questions: {
-    id: string;
+  questions: (QuestionReference & {
     selected: string[];
     grade: GradeResult | null;
     unknown: boolean;
-  }[];
+  })[];
 }
 
 export type HistoryRetryMode = "all" | "incorrect";

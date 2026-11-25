@@ -77,7 +77,7 @@ export default class KokushiPlugin extends Plugin {
     });
 
     const statisticsService =
-      new StatisticsService(this.app);
+      new StatisticsService(attemptService);
 
     // 既存のQuizViewを開く共通処理
     const getQuizView = async (): Promise<QuizView> => {

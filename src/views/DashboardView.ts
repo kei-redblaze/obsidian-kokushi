@@ -7,9 +7,10 @@ import {
 
 import { QuestionService } from "../services/QuestionService";
 import { SessionService } from "../services/SessionService";
-import { HistoryRetryMode, SessionRecord } from "../types";
+import { HistoryRetryMode, QuestionReference, SessionRecord } from "../types";
 import { renderSessionHistory } from "./SessionHistory";
 import { renderAttemptHistory, renderInvalidAttempts } from "./AttemptHistory";
+import { questionKey } from "../services/QuestionIdentity";
 import { DASHBOARD_HISTORY_LIMIT } from "../constants";
 import {
   StatisticsService,
@@ -31,7 +32,7 @@ export class DashboardView extends ItemView {
     private statisticsService: StatisticsService,
     private sessionService: SessionService,
     private onOpenQuestion: (
-      id: string
+      reference: QuestionReference
     ) => Promise<void>,
     private onRetrySession: (record: SessionRecord, mode: HistoryRetryMode) => Promise<boolean>,
     private onResumeSession: (id: string) => Promise<boolean>,
@@ -89,7 +90,7 @@ export class DashboardView extends ItemView {
 
       const stats =
         await this.statisticsService.load(
-          questions.map(question => question.id)
+          questions.map(questionKey)
         );
 
       if (version === this.renderVersion) this.renderDashboard(stats);
@@ -361,7 +362,7 @@ export class DashboardView extends ItemView {
       status.remove();
       renderInvalidAttempts(content, history.invalidLines);
       renderAttemptHistory(
-        content, history.attempts, new Set(questions.map(question => question.id)), this.onOpenQuestion,
+        content, history.attempts, new Set(questions.map(questionKey)), this.onOpenQuestion,
       );
     } catch (error) {
       if (version !== this.renderVersion) return;

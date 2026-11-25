@@ -6,6 +6,7 @@ import {
 
 import { Attempt } from "../types";
 import { ATTEMPTS_FOLDER, PATHS } from "../constants";
+import { isQuestionReference } from "./QuestionIdentity";
 import { ensureFolder } from "./VaultFolder";
 
 export class AttemptService {
@@ -66,20 +67,38 @@ export class AttemptService {
   }
 
   async getAttempts(): Promise<Attempt[]> {
-    const file =
-      this.app.vault.getAbstractFileByPath(
-        PATHS.attempts
-      );
-
-    if (!(file instanceof TFile)) {
-      return [];
-    }
-
-    const content = await this.app.vault.read(file);
-
-    return content
-      .split("\n")
-      .filter(line => line.trim() !== "")
-      .map(line => JSON.parse(line) as Attempt);
+    return (await this.readAttempts()).attempts;
   }
+
+  async readAttempts(): Promise<{ attempts: Attempt[]; invalidLines: number }> {
+    await this.queue;
+    const file = this.app.vault.getAbstractFileByPath(PATHS.attempts);
+    if (!(file instanceof TFile)) return { attempts: [], invalidLines: 0 };
+
+    const content = await this.app.vault.cachedRead(file);
+    const attempts: Attempt[] = [];
+    let invalidLines = 0;
+    for (const line of content.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const value: unknown = JSON.parse(line);
+        // 出典を持たない旧形式は集計対象外。
+        if (typeof value === "object" && value !== null && "id" in value &&
+            typeof value.id === "string" && !("source" in value)) continue;
+        if (isAttempt(value)) attempts.push(value);
+        else invalidLines++;
+      } catch {
+        invalidLines++;
+      }
+    }
+    return { attempts, invalidLines };
+  }
+}
+
+function isAttempt(value: unknown): value is Attempt {
+  if (!isQuestionReference(value)) return false;
+  const { timestamp, selected, correct } = value as Partial<Attempt>;
+  return typeof timestamp === "string" && Number.isFinite(Date.parse(timestamp)) &&
+    Array.isArray(selected) && selected.every(item => typeof item === "string") &&
+    (correct === null || typeof correct === "boolean");
 }

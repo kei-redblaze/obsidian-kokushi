@@ -3,11 +3,13 @@ import {
   ItemView,
   MarkdownRenderer,
   Notice,
+  Platform,
   WorkspaceLeaf,
 } from "obsidian";
 
 import {
   Question,
+  QuestionReference,
   GradeResult,
   SessionResult,
   SessionRecord,
@@ -17,11 +19,11 @@ import {
 
 import { QuestionService } from "../services/QuestionService";
 import { QuestionStudyService } from "../services/QuestionStudyService";
-import { ALL_PRACTICE_TARGETS, latestAttemptResults, practiceTarget, savedPracticeTargets } from "../services/PracticeTargets";
+import { ALL_PRACTICE_TARGETS, latestAttemptResults, practiceTarget } from "../services/PracticeTargets";
 import { GradingService } from "../services/GradingService";
 import { AttemptService } from "../services/AttemptService";
 import { SessionService } from "../services/SessionService";
-import { QUESTION_ID_PATTERN } from "../constants";
+import { questionKey, sourceLabel } from "../services/QuestionIdentity";
 import { renderDraftList } from "./DraftList";
 import { DiscardSessionModal } from "./DiscardSessionModal";
 import { renderQuestionStudy } from "./QuestionStudyPanel";
@@ -43,7 +45,7 @@ type OrderMode = "sequential" | "random";
 type CountMode = "all" | "ten" | "custom";
 
 type QuizScope = {
-  exams: string[] | null;
+  sources: string[] | null;
   order: OrderMode;
   targets: PracticeTarget[];
   countMode: CountMode;
@@ -103,7 +105,7 @@ export class QuizView extends ItemView {
   // ========================================
 
   private quizScope: QuizScope = {
-    exams: null,
+    sources: null,
     order: "sequential",
     targets: [...ALL_PRACTICE_TARGETS],
     countMode: "all",
@@ -253,25 +255,13 @@ export class QuizView extends ItemView {
     // 利用可能な出典
     // ========================================
 
-    const exams = [
-      ...new Set(
-        this.allQuestions
-          .map(
-            question =>
-              question.id.match(QUESTION_ID_PATTERN)?.[1]
-          )
-          .filter(
-            (value): value is string => !!value
-          )
-      ),
-    ].sort(
-      (a, b) => Number(b) - Number(a)
-    );
+    const sources = [...new Set(this.allQuestions.map(question => question.source))]
+      .sort((a, b) => b.localeCompare(a, "ja", { numeric: true }));
 
-    if (this.quizScope.exams !== null) {
-      this.quizScope.exams =
-        this.quizScope.exams.filter(
-          exam => exams.includes(exam)
+    if (this.quizScope.sources !== null) {
+      this.quizScope.sources =
+        this.quizScope.sources.filter(
+          source => sources.includes(source)
         );
     }
 
@@ -281,16 +271,10 @@ export class QuizView extends ItemView {
 
     const getFilteredQuestions = (): Question[] => {
       return this.allQuestions.filter(question => {
-        const exam = question.id.match(QUESTION_ID_PATTERN)?.[1];
-
-        if (
-          !exam ||
-          (this.quizScope.exams !== null && !this.quizScope.exams.includes(exam))
-        ) {
+        if (this.quizScope.sources !== null && !this.quizScope.sources.includes(question.source)) {
           return false;
         }
-
-        return this.quizScope.targets.includes(practiceTarget(question, latestResults.get(question.id)));
+        return this.quizScope.targets.includes(practiceTarget(question, latestResults.get(questionKey(question))));
       });
     };
 
@@ -483,38 +467,38 @@ export class QuizView extends ItemView {
     // 出典の複数選択
     // ========================================
 
-    const examGroup = root.createDiv({ cls: "kokushi-scope-group" });
-    const examHeading = examGroup.createDiv({ cls: "kokushi-section-heading" });
-    examHeading.createEl("h3", { text: "出典" });
-    const examActions = examHeading.createDiv({
+    const sourceGroup = root.createDiv({ cls: "kokushi-scope-group" });
+    const sourceHeading = sourceGroup.createDiv({ cls: "kokushi-section-heading" });
+    sourceHeading.createEl("h3", { text: "出典" });
+    const sourceActions = sourceHeading.createDiv({
       cls: "kokushi-scope-actions",
     });
 
     const allButton =
-      examActions.createEl("button", {
+      sourceActions.createEl("button", {
         text: "全選択",
       });
 
     const clearButton =
-      examActions.createEl("button", {
+      sourceActions.createEl("button", {
         text: "全解除",
       });
 
     allButton.type = "button";
     clearButton.type = "button";
 
-    const examRow = examGroup.createDiv({
+    const sourceRow = sourceGroup.createDiv({
       cls: "kokushi-scope-buttons",
     });
 
-    const examButtons =
+    const sourceButtons =
       new Map<string, HTMLButtonElement>();
 
-    const syncExams = (): void => {
-      for (const [exam, button] of examButtons) {
+    const syncSources = (): void => {
+      for (const [source, button] of sourceButtons) {
         const active =
-          this.quizScope.exams === null ||
-          this.quizScope.exams.includes(exam);
+          this.quizScope.sources === null ||
+          this.quizScope.sources.includes(source);
 
         button.classList.toggle(
           "is-selected",
@@ -528,56 +512,56 @@ export class QuizView extends ItemView {
       }
     };
 
-    for (const exam of exams) {
-      const button = examRow.createEl(
+    for (const source of sources) {
+      const button = sourceRow.createEl(
         "button",
         {
-          text: `第${exam}回`,
+          text: sourceLabel(source),
           cls: "kokushi-scope-button",
         }
       );
 
       button.type = "button";
 
-      examButtons.set(exam, button);
+      sourceButtons.set(source, button);
 
       button.addEventListener("click", () => {
         const selected =
-          this.quizScope.exams === null
-            ? [...exams]
-            : [...this.quizScope.exams];
+          this.quizScope.sources === null
+            ? [...sources]
+            : [...this.quizScope.sources];
 
-        const index = selected.indexOf(exam);
+        const index = selected.indexOf(source);
 
         if (index >= 0) {
           selected.splice(index, 1);
         } else {
-          selected.push(exam);
+          selected.push(source);
         }
 
-        this.quizScope.exams =
-          selected.length === exams.length
+        this.quizScope.sources =
+          selected.length === sources.length
             ? null
             : selected;
 
-        syncExams();
+        syncSources();
         updateCount();
       });
     }
 
     allButton.onclick = () => {
-      this.quizScope.exams = null;
-      syncExams();
+      this.quizScope.sources = null;
+      syncSources();
       updateCount();
     };
 
     clearButton.onclick = () => {
-      this.quizScope.exams = [];
-      syncExams();
+      this.quizScope.sources = [];
+      syncSources();
       updateCount();
     };
 
-    syncExams();
+    syncSources();
 
     // ========================================
     // 出題順序
@@ -795,9 +779,7 @@ export class QuizView extends ItemView {
     this.resetSession();
     if (this.questions.length === 0) return;
 
-    const { exams, order, targets } = this.quizScope;
-    const only = targets.length === 1 ? targets[0] : undefined;
-    const target = only === "incorrect" || only === "unanswered" ? only : "all";
+    const { sources, order, targets } = this.quizScope;
     const startedAt = new Date().toISOString();
     const suffix = Array.from(crypto.getRandomValues(new Uint32Array(2)))
       .map(value => value.toString(16).padStart(8, "0"))
@@ -806,7 +788,7 @@ export class QuizView extends ItemView {
     this.session = {
       id: `${startedAt.replace(/:/g, "-")}_${suffix}`,
       startedAt,
-      scope: { exams: exams === null ? null : [...exams], order, target, targets: [...targets] },
+      scope: { sources: sources === null ? null : [...sources], order, targets: [...targets] },
       sourceSessionId,
     };
     this.sessionService.claimDraft(this.session.id, this.leaf);
@@ -820,7 +802,7 @@ export class QuizView extends ItemView {
   ): SessionRecord {
     return {
       ...session,
-      schemaVersion: 1,
+      schemaVersion: 2,
       recordedAt: new Date().toISOString(),
       status,
       currentIndex: status === "in-progress" ? this.index : undefined,
@@ -829,6 +811,7 @@ export class QuizView extends ItemView {
         const state = this.questionStates.get(index);
         return {
           id: question.id,
+          source: question.source,
           selected: state?.selected ?? [],
           grade: state?.graded ?? null,
           unknown: state?.unknown ?? false,
@@ -924,12 +907,12 @@ export class QuizView extends ItemView {
       const allQuestions = await this.questionService.getQuestions();
       if (this.closing) return false;
 
-      const available = new Map(allQuestions.map(question => [question.id, question]));
+      const available = new Map(allQuestions.map(question => [questionKey(question), question]));
       const questions: Question[] = [];
       for (const item of record.questions) {
-        const question = available.get(item.id);
+        const question = available.get(questionKey(item));
         if (!question) {
-          new Notice(`問題 ${item.id} が見つからないため、演習を再開できません。`);
+          new Notice(`${sourceLabel(item.source)}の問題 ${item.id} が見つからないため、演習を再開できません。`);
           return false;
         }
         questions.push(question);
@@ -952,7 +935,7 @@ export class QuizView extends ItemView {
       const { startedAt, scope, sourceSessionId } = record;
       this.session = { id, startedAt, scope, sourceSessionId };
       adopted = true;
-      this.quizScope = { ...this.quizScope, exams: scope.exams, order: scope.order, targets: savedPracticeTargets(scope) };
+      this.quizScope = { ...this.quizScope, sources: scope.sources, order: scope.order, targets: [...scope.targets] };
       this.allQuestions = allQuestions;
       this.questions = questions;
       record.questions.forEach((item, index) => {
@@ -1239,7 +1222,7 @@ export class QuizView extends ItemView {
 
   private async renderQuiz(
     resetScroll = true,
-    scrollToBottom = false,
+    scrollToFinish = false,
   ): Promise<void> {
     const container = this.contentEl;
     this.memoEditor = null;
@@ -1257,6 +1240,7 @@ export class QuizView extends ItemView {
 
     container.removeClass("kokushi-scope");
     container.addClass("kokushi-quiz");
+    container.classList.toggle("kokushi-touch-no-hover", Platform.isIosApp);
 
     const question = this.getCurrentQuestion();
 
@@ -1458,19 +1442,27 @@ export class QuizView extends ItemView {
     // 前後移動・結果画面ボタン
     // ========================================
 
-    this.renderNavigation(container);
+    const finishButton = this.renderNavigation(container);
 
     // ========================================
     // 描画完了後のスクロール位置調整
     // ========================================
 
-    if (scrollToBottom) {
+    if (scrollToFinish) {
       await this.memoEditor;
-      const scroll = (): void => {
-        if (!this.closing && container.contains(questionEl)) container.scrollTop = container.scrollHeight;
-      };
-      scroll();
-      (container.ownerDocument.defaultView ?? window).requestAnimationFrame(scroll);
+      const view = container.ownerDocument.defaultView ?? window;
+      view.requestAnimationFrame(() => {
+        if (this.closing || !container.contains(finishButton)) return;
+        const viewport = view.visualViewport;
+        const visibleBottom = Math.min(
+          container.getBoundingClientRect().bottom,
+          viewport ? viewport.offsetTop + viewport.height : view.innerHeight,
+        );
+        container.scrollTop = Math.max(
+          0,
+          container.scrollTop + finishButton.getBoundingClientRect().bottom - visibleBottom,
+        );
+      });
     } else if (resetScroll) {
       this.resetScrollAfterRender();
     } else {
@@ -1693,6 +1685,7 @@ export class QuizView extends ItemView {
     try {
       const write = this.attemptService.save({
         id: question.id,
+        source: question.source,
         sessionId: session.id,
         timestamp: new Date().toISOString(),
         selected,
@@ -1786,7 +1779,7 @@ export class QuizView extends ItemView {
   // 問題間ナビゲーション
   // ========================================
 
-  private renderNavigation(container: HTMLElement): void {
+  private renderNavigation(container: HTMLElement): HTMLButtonElement {
     const nav = container.createDiv({
       cls: "kokushi-navigation",
     });
@@ -1867,6 +1860,7 @@ export class QuizView extends ItemView {
     resultButton.onclick = () => {
       void this.openSessionResults();
     };
+    return resultButton;
   }
 
   // ========================================
@@ -2146,6 +2140,7 @@ export class QuizView extends ItemView {
       thead.createEl("tr");
 
     for (const title of [
+      "出典",
       "問題番号",
       "正答",
       "自分の解答",
@@ -2179,6 +2174,7 @@ export class QuizView extends ItemView {
       // 問題番号リンク
       // ------------------------------------
 
+      row.createEl("td", { text: sourceLabel(question.source) });
       const idCell = row.createEl("td");
 
       const linkButton =
@@ -2253,14 +2249,29 @@ export class QuizView extends ItemView {
     // 同じ問題セットで再演習
     // ----------------------------------------
 
+    const replayActions = actions.createDiv({ cls: "kokushi-session-replay" });
     const restartButton =
-      actions.createEl("button", {
+      replayActions.createEl("button", {
         text: "同じ問題でもう一度",
       });
 
     restartButton.onclick = () => {
       this.startSession();
 
+      void this.renderQuiz(true);
+    };
+
+    const reviewQuestions = this.questions.filter((_, index) => {
+      const grade = this.questionStates.get(index)?.graded;
+      return grade == null || grade === "incorrect";
+    });
+    const review = replayActions.createEl("button", { type: "button", text: "間違えた問題を復習" });
+    review.disabled = reviewQuestions.length === 0;
+    review.onclick = () => {
+      if (review.disabled) return;
+      const sourceSessionId = this.session?.id;
+      this.questions = reviewQuestions;
+      this.startSession(sourceSessionId);
       void this.renderQuiz(true);
     };
 
@@ -2313,7 +2324,7 @@ export class QuizView extends ItemView {
   // ========================================
 
   public async openQuestionFromDashboard(
-    id: string
+    reference: QuestionReference
   ): Promise<void> {
     if (!await this.leaveSession()) return;
     await this.loadQuestions();
@@ -2321,19 +2332,19 @@ export class QuizView extends ItemView {
 
     const question =
       this.allQuestions.find(
-        item => item.id === id
+        item => item.source === reference.source && item.id === reference.id
       );
 
     if (!question) {
       new Notice(
-        `問題 ${id} が見つかりません`
+        `${sourceLabel(reference.source)}の問題 ${reference.id} が見つかりません`
       );
 
       return;
     }
 
     this.quizScope = {
-      exams: null,
+      sources: null,
       order: "sequential",
       targets: [...ALL_PRACTICE_TARGETS],
       countMode: "all",
@@ -2355,12 +2366,12 @@ export class QuizView extends ItemView {
       const allQuestions = await this.questionService.getQuestions();
       if (this.closing) return false;
 
-      const byId = new Map(allQuestions.map(question => [question.id, question]));
+      const byId = new Map(allQuestions.map(question => [questionKey(question), question]));
       const requested = mode === "all"
         ? record.questions
         : record.questions.filter(question => question.grade === "incorrect");
       const questions = requested.flatMap(item => {
-        const question = byId.get(item.id);
+        const question = byId.get(questionKey(item));
         return question ? [question] : [];
       });
 
@@ -2382,7 +2393,7 @@ export class QuizView extends ItemView {
       this.allQuestions = allQuestions;
       this.questions = questions;
       this.quizScope = {
-        exams: null,
+        sources: null,
         order: "sequential",
         targets: mode === "all" ? [...ALL_PRACTICE_TARGETS] : [mode],
         countMode: "all",

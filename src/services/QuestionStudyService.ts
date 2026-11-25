@@ -1,6 +1,7 @@
+import { isQuestionNumber, readYamlQuestionNumber } from "./QuestionIdentity";
 import { App, Platform, TAbstractFile, TFile, TFolder, WorkspaceLeaf } from "obsidian";
 import { isMap, isScalar, isSeq, parseDocument, Scalar } from "yaml";
-import { PATHS, QUESTION_ID_PATTERN } from "../constants";
+import { PATHS } from "../constants";
 import { Question } from "../types";
 import { ensureFolder } from "./VaultFolder";
 
@@ -152,7 +153,7 @@ export class QuestionStudyService {
     await this.enqueue(async () => {
       for (const metadata of this.app.vault.getFiles()) {
         if (!metadata.path.startsWith(`${PATHS.questions}/`) ||
-            metadata.extension !== "yaml" || !QUESTION_ID_PATTERN.test(metadata.basename)) continue;
+            metadata.extension !== "yaml" || !isQuestionNumber(metadata.basename)) continue;
 
         try {
           const raw = await this.app.vault.cachedRead(metadata);
@@ -201,8 +202,15 @@ function isNotePath(path: unknown): path is string {
 
 function parseMetadata(data: string, id: string) {
   const doc = parseDocument(data);
-  if (doc.errors.length || !isMap(doc.contents) || doc.get("id") !== id) {
+  const idNode = doc.get("id", true);
+  if (doc.errors.length || !isMap(doc.contents) || !isScalar(idNode) || readYamlQuestionNumber(idNode) !== id) {
     throw new Error("問題YAMLの形式または問題IDが不正です");
+  }
+  // 数値で解釈されたIDの先頭のゼロを、YAMLを書き戻すときも保持する。
+  if (typeof idNode.value === "number") {
+    idNode.value = id;
+    idNode.type = Scalar.QUOTE_DOUBLE;
+    delete idNode.tag;
   }
   return doc;
 }

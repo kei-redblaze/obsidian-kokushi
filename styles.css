@@ -132,7 +132,7 @@ If your plugin does not need CSS, delete this file.
   cursor: pointer;
 }
 
-.kokushi-option:hover {
+.kokushi-quiz:not(.kokushi-touch-no-hover) .kokushi-option:hover {
   background: var(--background-modifier-hover);
 }
 
@@ -899,11 +899,23 @@ If your plugin does not need CSS, delete this file.
 
 .kokushi-note-modal-container.modal-container {
   align-items: flex-start;
-  padding-top: calc(var(--kokushi-note-viewport-top, 0px) + 12px);
+  padding-top: var(--kokushi-note-viewport-top, 12px);
 }
 
 .kokushi-note-modal.modal {
   max-height: calc(var(--kokushi-note-viewport-height, 100dvh) - 24px);
   overflow-y: auto;
   overscroll-behavior-y: contain;
+}
+
+.kokushi-session-replay {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.kokushi-session-replay > button {
+  white-space: normal;
+  height: auto;
+  min-height: 44px;
 }

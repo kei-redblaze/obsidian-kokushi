@@ -79,16 +79,20 @@ export class CreateStudyNoteModal extends Modal {
     this.containerEl.addClass("kokushi-note-modal-container");
     this.modalEl.addClass("kokushi-note-modal");
     const fit = (): void => {
-      this.containerEl.setCssProps({
-        "--kokushi-note-viewport-top": `${Math.max(0, viewport?.offsetTop ?? 0)}px`,
-        "--kokushi-note-viewport-height": `${viewport?.height || view.innerHeight}px`,
-      });
+      const height = viewport?.height || view.innerHeight;
+      this.containerEl.setCssProps({ "--kokushi-note-viewport-height": `${height}px` });
+      const spareHeight = Math.max(0, height - this.modalEl.offsetHeight - 24);
+      const top = Math.max(0, viewport?.offsetTop ?? 0) + 12 + Math.round(spareHeight * 0.4);
+      this.containerEl.setCssProps({ "--kokushi-note-viewport-top": `${top}px` });
     };
     fit();
     view.addEventListener("resize", fit);
     viewport?.addEventListener("resize", fit);
     viewport?.addEventListener("scroll", fit);
+    const observer = new ResizeObserver(fit);
+    observer.observe(this.modalEl);
     this.stopFitting = () => {
+      observer.disconnect();
       view.removeEventListener("resize", fit);
       viewport?.removeEventListener("resize", fit);
       viewport?.removeEventListener("scroll", fit);
