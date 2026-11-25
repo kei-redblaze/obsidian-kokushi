@@ -1,5 +1,7 @@
 import { App, Modal, Notice } from "obsidian";
 import { HistoryRetryMode, SessionRecord } from "../types";
+import { SessionService } from "../services/SessionService";
+import { DiscardSessionModal } from "./DiscardSessionModal";
 import { formatSessionDate } from "./sessionFormatting";
 
 const GRADE_LABELS = {
@@ -8,11 +10,36 @@ const GRADE_LABELS = {
   excluded: "採点除外",
 };
 
+export interface SessionDetailActions {
+  retry: (record: SessionRecord, mode: HistoryRetryMode) => Promise<boolean>;
+  resume: (id: string) => Promise<boolean>;
+  showActive?: (id: string) => Promise<boolean>;
+  refresh: () => Promise<void>;
+}
+
+export async function openSessionDetails(
+  app: App, service: SessionService, id: string, actions: SessionDetailActions,
+): Promise<void> {
+  try {
+    const record = await service.getSession(id);
+    if (!record) {
+      new Notice("演習履歴が見つかりませんでした。");
+      await actions.refresh();
+      return;
+    }
+    new SessionDetailsModal(app, record, service, actions).open();
+  } catch (error) {
+    console.error("[Kokushi] Session details error", error);
+    new Notice("演習履歴を開けませんでした。");
+  }
+}
+
 export class SessionDetailsModal extends Modal {
   constructor(
     app: App,
     private record: SessionRecord,
-    private onRetry: (record: SessionRecord, mode: HistoryRetryMode) => Promise<boolean>,
+    private service: SessionService,
+    private actions: SessionDetailActions,
   ) {
     super(app);
   }
@@ -34,27 +61,49 @@ export class SessionDetailsModal extends Modal {
     });
 
     const actions = root.createDiv({ cls: "kokushi-history-actions" });
-    const retrySet = actions.createEl("button", { type: "button", text: "このセットで再演習", cls: "mod-cta" });
-    const retryIncorrect = result.incorrect > 0
-      ? actions.createEl("button", { type: "button", text: "この回の誤答を再演習" })
-      : null;
-
-    const retry = async (mode: HistoryRetryMode): Promise<void> => {
-      if (retrySet.disabled) return;
-      retrySet.disabled = true;
-      if (retryIncorrect) retryIncorrect.disabled = true;
-      try {
-        if (await this.onRetry(this.record, mode)) this.close();
-      } catch (error) {
-        console.error("[Kokushi] History retry error", error);
-        new Notice("演習画面を開けませんでした。");
-      } finally {
-        retrySet.disabled = false;
-        if (retryIncorrect) retryIncorrect.disabled = false;
-      }
+    const status = this.service.getStatus(this.record);
+    const addAction = (text: string, run: () => Promise<boolean>, cls = ""): void => {
+      const button = actions.createEl("button", { type: "button", text, cls });
+      button.onclick = async () => {
+        if (button.disabled) return;
+        const buttons = actions.querySelectorAll("button");
+        buttons.forEach(item => { item.disabled = true; });
+        try {
+          if (await run()) this.close();
+        } catch (error) {
+          console.error("[Kokushi] Session action error", error);
+          new Notice("演習画面を開けませんでした。");
+        } finally {
+          buttons.forEach(item => { item.disabled = false; });
+        }
+      };
     };
-    retrySet.onclick = () => { void retry("all"); };
-    if (retryIncorrect) retryIncorrect.onclick = () => { void retry("incorrect"); };
+
+    if (status === "active") {
+      const showActive = this.actions.showActive;
+      if (showActive) addAction("演習に戻る", () => showActive(this.record.id), "mod-cta");
+    } else {
+      if (status === "interrupted") {
+        addAction("再開", () => this.actions.resume(this.record.id), "mod-cta");
+      } else {
+        addAction("このセットで再演習", () => this.actions.retry(this.record, "all"), "mod-cta");
+        if (result.incorrect > 0) {
+          addAction("この回の誤答を再演習", () => this.actions.retry(this.record, "incorrect"));
+        }
+      }
+
+      const discard = actions.createEl("button", { type: "button", text: "演習履歴を破棄", cls: "mod-warning" });
+      discard.onclick = () => {
+        new DiscardSessionModal(this.app, async includeAttempts => {
+          await this.service.discard(this.record.id, includeAttempts);
+          this.close();
+          void this.actions.refresh().catch(error => {
+            console.error("[Kokushi] History refresh error", error);
+            new Notice("履歴の表示を更新できませんでした。");
+          });
+        }).open();
+      };
+    }
 
     const wrapper = root.createDiv({ cls: "kokushi-session-table-wrapper" });
     const table = wrapper.createEl("table", { cls: "kokushi-session-table" });

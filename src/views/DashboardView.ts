@@ -20,9 +20,6 @@ import {
 export const VIEW_TYPE_DASHBOARD =
   "kokushi-dashboard";
 
-export type DashboardTarget =
-  "unanswered" | "incorrect";
-
 export class DashboardView extends ItemView {
   private renderVersion = 0;
   private page: "dashboard" | "sessions" | "attempts" = "dashboard";
@@ -33,14 +30,12 @@ export class DashboardView extends ItemView {
     private questionService: QuestionService,
     private statisticsService: StatisticsService,
     private sessionService: SessionService,
-    private onStartQuiz: (
-      target: DashboardTarget
-    ) => Promise<void>,
     private onOpenQuestion: (
       id: string
     ) => Promise<void>,
     private onRetrySession: (record: SessionRecord, mode: HistoryRetryMode) => Promise<boolean>,
-    private onResumeSession: (id: string) => Promise<void>,
+    private onResumeSession: (id: string) => Promise<boolean>,
+    private onShowActive: (id: string) => Promise<boolean>,
     private onOpenScope: () => Promise<void>
   ) {
     super(leaf);
@@ -135,22 +130,10 @@ export class DashboardView extends ItemView {
     root.empty();
     root.addClass("kokushi-dashboard");
 
-    root.createEl("h2", {
-      text: "ダッシュボード",
-    });
-
-    const actions = root.createDiv({
-      cls: "kokushi-dashboard-actions",
-    });
-
-    const refreshButton = actions.createEl(
-      "button",
-      { text: "統計を更新" }
-    );
-
-    refreshButton.onclick = () => {
-      void this.showOverview();
-    };
+    const heading = root.createDiv({ cls: "kokushi-section-heading" });
+    heading.createEl("h2", { text: "ダッシュボード" });
+    const refreshButton = heading.createEl("button", { text: "更新", type: "button" });
+    refreshButton.onclick = () => { void this.showOverview(); };
 
     renderInvalidAttempts(root, stats.invalidLines);
 
@@ -242,30 +225,6 @@ export class DashboardView extends ItemView {
       cls: "kokushi-dashboard-actions",
     });
 
-    const unansweredButton =
-      quizActions.createEl("button", {
-        text: "未回答問題を演習",
-      });
-
-    unansweredButton.disabled =
-      stats.unansweredQuestions === 0;
-
-    unansweredButton.onclick = () => {
-      void this.onStartQuiz("unanswered");
-    };
-
-    const incorrectButton =
-      quizActions.createEl("button", {
-        text: "要復習問題を演習",
-      });
-
-    incorrectButton.disabled =
-      stats.reviewQuestions === 0;
-
-    incorrectButton.onclick = () => {
-      void this.onStartQuiz("incorrect");
-    };
-
     const scopeButton = quizActions.createEl("button", {
       type: "button",
       text: "出題範囲を選択",
@@ -349,8 +308,10 @@ export class DashboardView extends ItemView {
     const sessionSection = root.createDiv();
     sessionSection.createEl("h3", { text: "演習履歴" });
     void renderSessionHistory(
-      sessionSection, this.app, this.sessionService, this.onRetrySession, this.onResumeSession,
-      () => { void this.openHistory("sessions"); },
+      sessionSection, this.app, this.sessionService, {
+        retry: this.onRetrySession, resume: this.onResumeSession, showActive: this.onShowActive,
+        refresh: () => this.showOverview(),
+      }, () => { void this.openHistory("sessions"); },
     );
 
     const attemptSection = root.createDiv();
@@ -383,7 +344,10 @@ export class DashboardView extends ItemView {
 
     const content = root.createDiv({ cls: "kokushi-history-page" });
     if (kind === "sessions") {
-      await renderSessionHistory(content, this.app, this.sessionService, this.onRetrySession, this.onResumeSession);
+      await renderSessionHistory(content, this.app, this.sessionService, {
+        retry: this.onRetrySession, resume: this.onResumeSession, showActive: this.onShowActive,
+        refresh: () => this.openHistory("sessions"),
+      });
       return;
     }
 

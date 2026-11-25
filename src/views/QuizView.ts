@@ -228,7 +228,10 @@ export class QuizView extends ItemView {
     root.addClass("kokushi-quiz");
     root.addClass("kokushi-scope");
     root.createEl("h2", { text: "出題範囲を選択" });
-    void renderDraftList(root.createDiv(), this.sessionService, id => this.resumeDraft(id));
+    renderDraftList(root.createDiv(), this.app, this.sessionService, {
+      resume: id => this.resumeDraft(id),
+      retry: (record, mode) => this.startFromHistory(record, mode),
+    });
 
     const loading = root.createEl("p", { text: "解答履歴を読み込んでいます..." });
     let latestResults: Map<string, boolean | null>;
@@ -479,20 +482,21 @@ export class QuizView extends ItemView {
     // 出典の複数選択
     // ========================================
 
-    const examGroup = createGroup("出典");
-
-    const examActions = examGroup.createDiv({
+    const examGroup = root.createDiv({ cls: "kokushi-scope-group" });
+    const examHeading = examGroup.createDiv({ cls: "kokushi-section-heading" });
+    examHeading.createEl("h3", { text: "出典" });
+    const examActions = examHeading.createDiv({
       cls: "kokushi-scope-actions",
     });
 
     const allButton =
       examActions.createEl("button", {
-        text: "すべて選択",
+        text: "全選択",
       });
 
     const clearButton =
       examActions.createEl("button", {
-        text: "選択解除",
+        text: "全解除",
       });
 
     allButton.type = "button";
@@ -804,7 +808,7 @@ export class QuizView extends ItemView {
       scope: { exams: exams === null ? null : [...exams], order, target, targets: [...targets] },
       sourceSessionId,
     };
-    this.sessionService.claimDraft(this.session.id);
+    this.sessionService.claimDraft(this.session.id, this.leaf);
     this.draftDirty = true;
     void this.flushDraft();
   }
@@ -894,26 +898,26 @@ export class QuizView extends ItemView {
     }
   }
 
-  public async resumeDraft(id: string): Promise<void> {
-    if (this.session?.id === id || !await this.leaveSession()) return;
+  public async resumeDraft(id: string): Promise<boolean> {
+    if (this.session?.id === id || !await this.leaveSession()) return false;
 
-    if (!this.sessionService.claimDraft(id)) {
+    if (!this.sessionService.claimDraft(id, this.leaf)) {
       new Notice("この演習は別のペインで開いています。");
-      return;
+      return false;
     }
 
     this.saving = true;
     let adopted = false;
     try {
       const record = await this.sessionService.getSession(id);
-      if (this.closing) return;
+      if (this.closing) return false;
       if (record?.status !== "in-progress" || record.currentIndex === undefined) {
         new Notice("再開できる演習が見つかりませんでした。");
-        return;
+        return false;
       }
 
       const allQuestions = await this.questionService.getQuestions();
-      if (this.closing) return;
+      if (this.closing) return false;
 
       const available = new Map(allQuestions.map(question => [question.id, question]));
       const questions: Question[] = [];
@@ -921,7 +925,7 @@ export class QuizView extends ItemView {
         const question = available.get(item.id);
         if (!question) {
           new Notice(`問題 ${item.id} が見つからないため、演習を再開できません。`);
-          return;
+          return false;
         }
         questions.push(question);
       }
@@ -943,9 +947,11 @@ export class QuizView extends ItemView {
       this.index = record.currentIndex;
       this.restoreState(this.index);
       await this.renderQuiz(true);
+      return true;
     } catch (error) {
       console.error("[Kokushi] Draft resume error", error);
       new Notice("中断した演習を読み込めませんでした。");
+      return false;
     } finally {
       if (!adopted) this.sessionService.releaseDraft(id);
       this.saving = false;
@@ -994,6 +1000,8 @@ export class QuizView extends ItemView {
   ): Promise<void> {
     if (this.saving || this.closing) return;
 
+    if (await this.leaveDiscardedSession() || this.saving || this.closing) return;
+
     if (
       newIndex < 0 ||
       newIndex >= this.questions.length
@@ -1027,6 +1035,9 @@ export class QuizView extends ItemView {
   private async openSessionResults(): Promise<void> {
     const session = this.session;
     if (this.saving || this.closing || !session) return;
+
+    if (await this.leaveDiscardedSession()) return;
+    if (this.saving || this.closing || this.session !== session) return;
 
     this.saving = true;
 
@@ -1653,9 +1664,11 @@ export class QuizView extends ItemView {
       return;
     }
 
-    this.saving = true;
-
+    if (await this.leaveDiscardedSession()) return;
     const session = this.session;
+    if (!session || this.saving || this.closing || this.getCurrentQuestion() !== question) return;
+
+    this.saving = true;
     const selected = [...this.selected];
     const wasUnknown = this.unknown;
 
@@ -1672,6 +1685,7 @@ export class QuizView extends ItemView {
     try {
       const write = this.attemptService.save({
         id: question.id,
+        sessionId: session.id,
         timestamp: new Date().toISOString(),
         selected,
         correct:
@@ -2261,6 +2275,13 @@ export class QuizView extends ItemView {
     };
   }
 
+  private async leaveDiscardedSession(): Promise<boolean> {
+    if (!this.session || !this.sessionService.isDiscarded(this.session.id)) return false;
+    new Notice("この演習履歴は破棄されています。");
+    await this.openScopeFromDashboard();
+    return true;
+  }
+
   public async openScopeFromDashboard(): Promise<void> {
     if (!await this.leaveSession()) return;
     this.questions = [];
@@ -2271,33 +2292,6 @@ export class QuizView extends ItemView {
   // ========================================
   // ダッシュボードから演習開始
   // ========================================
-
-  public async startFromDashboard(
-    target: "unanswered" | "incorrect"
-  ): Promise<void> {
-    if (!await this.leaveSession()) return;
-    await this.loadQuestions();
-    if (this.closing) return;
-
-    const latestResults = latestAttemptResults(await this.attemptService.getAttempts());
-    if (this.closing) return;
-
-    this.quizScope = {
-      exams: null,
-      order: "sequential",
-      targets: [target],
-      countMode: "all",
-      customCount: "25",
-    };
-
-    this.questions = this.allQuestions.filter(question =>
-      practiceTarget(question, latestResults.get(question.id)) === target
-    );
-
-    this.startSession();
-
-    await this.renderQuiz(true);
-  }
 
   // ========================================
   // ダッシュボードから個別問題を開く

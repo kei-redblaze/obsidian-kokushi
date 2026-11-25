@@ -9,8 +9,10 @@ export function renderQuestionMemo(
   service: QuestionStudyService,
   initial: string,
 ): () => Promise<boolean> {
-  const label = root.createEl("label", { text: "メモ", cls: "kokushi-study-field" });
-  const input = label.createEl("textarea", { cls: "kokushi-study-memo", attr: { rows: "3" } });
+  const input = root.createEl("textarea", {
+    cls: "kokushi-study-memo",
+    attr: { rows: "3", "aria-label": "メモ", placeholder: "ここにメモを入力" },
+  });
   input.value = initial;
   const status = root.createDiv({
     cls: "kokushi-study-feedback kokushi-study-error",

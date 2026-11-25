@@ -1,30 +1,53 @@
+import { App } from "obsidian";
 import type { SessionService } from "../services/SessionService";
+import { openSessionDetails, SessionDetailActions } from "./SessionDetailsModal";
 import { formatSessionDate } from "./sessionFormatting";
 
-export async function renderDraftList(
+export function renderDraftList(
   root: HTMLElement,
+  app: App,
   service: SessionService,
-  resume: (id: string) => Promise<void>
-): Promise<void> {
-  try {
-    const drafts = await service.getDrafts();
-    if (drafts.length === 0) return;
+  actions: Pick<SessionDetailActions, "resume" | "retry">,
+): void {
+  const heading = root.createDiv({ cls: "kokushi-section-heading" });
+  heading.createEl("h3", { text: "未完了の演習" });
+  const update = heading.createEl("button", { type: "button", text: "更新" });
+  const content = root.createDiv();
+  let generation = 0;
 
-    root.createEl("h3", { text: "中断した演習" });
-    const list = root.createEl("ul");
-    for (const draft of drafts) {
-      const item = list.createEl("li");
-      const label = `${formatSessionDate(draft.recordedAt)}、第${draft.currentIndex + 1}問 / 全${draft.total}問`;
-      const button = item.createEl("button", {
-        text: "再開",
-        attr: { "aria-label": `${label}の演習を再開` },
-      });
-      button.type = "button";
-      button.onclick = () => { void resume(draft.id); };
-      item.createSpan({ text: ` ${label}` });
+  const refresh = async (): Promise<void> => {
+    const request = ++generation;
+    update.disabled = true;
+    try {
+      const drafts = await service.getDrafts();
+      if (request !== generation) return;
+      content.empty();
+      if (drafts.length === 0) {
+        content.createEl("p", { text: "未完了の演習はありません。" });
+        return;
+      }
+
+      const list = content.createEl("ul");
+      for (const draft of drafts) {
+        const item = list.createEl("li");
+        const label = `${formatSessionDate(draft.recordedAt)}、第${draft.currentIndex + 1}問 / 全${draft.total}問`;
+        const button = item.createEl("button", {
+          text: "詳細",
+          type: "button",
+          attr: { "aria-label": `${label}の演習の詳細` },
+        });
+        button.onclick = () => { void openSessionDetails(app, service, draft.id, { ...actions, refresh }); };
+        item.createSpan({ text: ` ${label}` });
+      }
+    } catch (error) {
+      if (request !== generation) return;
+      console.error("[Kokushi] Draft list error", error);
+      content.empty();
+      content.createEl("p", { text: "未完了の演習を読み込めませんでした。" });
+    } finally {
+      if (request === generation) update.disabled = false;
     }
-  } catch (error) {
-    console.error("[Kokushi] Draft list error", error);
-    root.createEl("p", { text: "中断した演習を読み込めませんでした。" });
-  }
+  };
+  update.onclick = () => { void refresh(); };
+  void refresh();
 }
