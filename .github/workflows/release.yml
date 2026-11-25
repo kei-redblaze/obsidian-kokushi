@@ -2,8 +2,15 @@ name: Release Obsidian plugin
 
 on:
     push:
-        tags:
-            - '*'
+        branches:
+            - master
+        paths:
+            - 'manifest.json'
+            - '.github/workflows/release.yml'
+
+concurrency:
+    group: kokushi-release-${{ github.sha }}
+    cancel-in-progress: false
 
 jobs:
     build:
@@ -14,37 +21,62 @@ jobs:
             attestations: write
         steps:
             - uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
 
-            - name: Use Node.js
-              uses: actions/setup-node@v6
+            - uses: actions/setup-node@v6
               with:
                   node-version: 24
                   cache: 'npm'
 
+            - name: Check for a new version
+              id: version
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  version="$(node -p 'require("./manifest.json").version')"
+                  if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+                      echo "::error::manifest.json must contain a version in X.Y.Z format"
+                      exit 1
+                  fi
+
+                  latest="$(git tag --list --sort=-version:refname | awk '/^[0-9]+\.[0-9]+\.[0-9]+$/ && !found { print; found=1 }')"
+                  if [[ -n "$latest" ]] && { [[ "$latest" == "$version" ]] || [[ "$(printf '%s\n' "$latest" "$version" | LC_ALL=C sort -V | tail -n 1)" != "$version" ]]; }; then
+                      echo "Version $version is not newer than tag $latest."
+                      exit 0
+                  fi
+                  echo "release=$version" >> "$GITHUB_OUTPUT"
+
             - name: Build plugin
+              if: steps.version.outputs.release != ''
               run: |
                   npm ci
                   npm run build
 
-            - name: Check for optional styles
-              id: styles
-              run: |
-                  [ -f styles.css ] && echo "exists=true" >> "$GITHUB_OUTPUT" || echo "exists=false" >> "$GITHUB_OUTPUT"
-
             - name: Attest build provenance
+              if: steps.version.outputs.release != ''
               uses: actions/attest@v4
               with:
                   subject-path: |
                       main.js
-                      ${{ steps.styles.outputs.exists == 'true' && 'styles.css' || '' }}
+                      manifest.json
+                      styles.css
 
-            - name: Create release
+            - name: Publish release
+              if: steps.version.outputs.release != ''
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  VERSION: ${{ steps.version.outputs.release }}
+              shell: bash
               run: |
-                  tag="${GITHUB_REF#refs/tags/}"
+                  set -euo pipefail
+                  git fetch --tags
+                  if git show-ref --verify --quiet "refs/tags/$VERSION"; then
+                      echo "Tag $VERSION was already created."
+                      exit 0
+                  fi
 
-                  gh release create "$tag" \
-                    --title="$tag" \
-                    --draft \
-                    main.js manifest.json ${{ steps.styles.outputs.exists == 'true' && 'styles.css' || '' }}
+                  gh release create "$VERSION" main.js manifest.json styles.css \
+                      --target "$GITHUB_SHA" \
+                      --title "$VERSION" \
+                      --generate-notes
