@@ -16,12 +16,14 @@ export async function renderQuestionStudy(
     loading.remove();
     const flushMemo = renderQuestionMemo(root, question, service, initial.memo);
 
-    root.createEl("h4", { text: "関連知識ノート" });
+    const heading = root.createDiv({ cls: "kokushi-study-heading" });
+    heading.createEl("h4", { text: "ノート" });
+    const headingActions = heading.createDiv({ cls: "kokushi-study-heading-actions" });
+    const create = headingActions.createEl("button", { type: "button", text: "新規" });
+    const edit = headingActions.createEl("button", { type: "button", text: "編集" });
     const links = root.createDiv();
     const actions = root.createDiv({ cls: "kokushi-study-actions" });
-    const create = actions.createEl("button", { type: "button", text: "新規ノート", cls: "mod-cta" });
     const existing = actions.createEl("button", { type: "button", text: "既存ノートを関連付け", cls: "mod-cta" });
-    const edit = actions.createEl("button", { type: "button", text: "編集", cls: "mod-cta" });
     const remove = actions.createEl("button", { type: "button", text: "選択した関連付けを外す" });
     const cancel = actions.createEl("button", { type: "button", text: "キャンセル" });
 
@@ -38,9 +40,13 @@ export async function renderQuestionStudy(
 
     const renderLinks = (): void => {
       links.empty();
-      create.hidden = existing.hidden = edit.hidden = editing;
-      edit.disabled = relatedNotes.length === 0;
-      remove.hidden = cancel.hidden = !editing;
+      if (editing) {
+        headingActions.remove();
+        root.append(actions);
+      } else {
+        actions.remove();
+        heading.append(headingActions);
+      }
       remove.disabled = selected.size === 0;
       if (relatedNotes.length === 0) return;
 
@@ -79,12 +85,14 @@ export async function renderQuestionStudy(
       editing = false;
       selected.clear();
       renderLinks();
+      edit.focus();
     };
 
     renderLinks();
     const attach = async (file: TFile): Promise<void> => {
       relatedNotes = (await service.linkNote(question, file)).relatedNotes;
-      renderLinks();
+      if (editing) stopEditing();
+      else renderLinks();
     };
 
     create.onclick = () => {
@@ -108,13 +116,13 @@ export async function renderQuestionStudy(
     edit.onclick = () => {
       editing = true;
       renderLinks();
-      links.querySelector("input")?.focus();
+      (links.querySelector("input") ?? existing).focus();
     };
     cancel.onclick = stopEditing;
 
     remove.onclick = async () => {
       if (remove.disabled) return;
-      remove.disabled = cancel.disabled = true;
+      remove.disabled = cancel.disabled = existing.disabled = true;
       const checks = links.querySelectorAll("input");
       checks.forEach(check => { check.disabled = true; });
       try {
@@ -126,7 +134,7 @@ export async function renderQuestionStudy(
         new Notice("ノートの関連付けを外せませんでした。");
         remove.disabled = selected.size === 0;
       } finally {
-        cancel.disabled = false;
+        cancel.disabled = existing.disabled = false;
         checks.forEach(check => { check.disabled = false; });
       }
     };

@@ -40,7 +40,8 @@ export class DashboardView extends ItemView {
       id: string
     ) => Promise<void>,
     private onRetrySession: (record: SessionRecord, mode: HistoryRetryMode) => Promise<boolean>,
-    private onResumeSession: (id: string) => Promise<void>
+    private onResumeSession: (id: string) => Promise<void>,
+    private onOpenScope: () => Promise<void>
   ) {
     super(leaf);
   }
@@ -263,6 +264,18 @@ export class DashboardView extends ItemView {
 
     incorrectButton.onclick = () => {
       void this.onStartQuiz("incorrect");
+    };
+
+    const scopeButton = quizActions.createEl("button", {
+      type: "button",
+      text: "出題範囲を選択",
+      cls: "mod-cta kokushi-dashboard-scope",
+    });
+    scopeButton.onclick = () => {
+      void this.onOpenScope().catch(error => {
+        console.error("[Kokushi] Open quiz scope error", error);
+        new Notice("出題範囲を開けませんでした。");
+      });
     };
 
     // ----------------------------------------

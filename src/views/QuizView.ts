@@ -1722,7 +1722,7 @@ export class QuizView extends ItemView {
     if (this.graded === null) return;
 
     const resultEl = container.createDiv({
-      cls: "kokushi-result",
+      cls: `kokushi-result is-${this.graded}`,
     });
 
     const labels: Record<
@@ -1734,10 +1734,18 @@ export class QuizView extends ItemView {
       excluded: "採点除外",
     };
 
-    resultEl.createEl("h3", {
+    const summary = resultEl.createDiv({ cls: "kokushi-result-heading" });
+    summary.createEl("h3", {
       text: labels[this.graded],
       cls: `kokushi-result-grade is-${this.graded}`,
     });
+    const excluded = this.graded === "excluded" || question.excluded;
+    if (!excluded) {
+      summary.createEl("p", {
+        text: `正答：${this.formatCorrectAnswer(question)}`,
+        cls: "kokushi-result-answer",
+      });
+    }
 
     if (this.unknown) {
       resultEl.createEl("p", {
@@ -1745,11 +1753,9 @@ export class QuizView extends ItemView {
       });
     }
 
-    resultEl.createEl("p", {
-      text: question.excluded
-        ? "この問題は採点対象外です。"
-        : `正答：${this.formatCorrectAnswer(question)}`,
-    });
+    if (excluded) {
+      resultEl.createEl("p", { text: "この問題は採点対象外です。" });
+    }
 
     const studyPanel = resultEl.createDiv({ cls: "kokushi-question-study" });
     this.memoEditor = renderQuestionStudy(studyPanel, this.app, question, this.studyService);
@@ -2253,6 +2259,13 @@ export class QuizView extends ItemView {
       this.resetSession();
       void this.renderScopeSelection();
     };
+  }
+
+  public async openScopeFromDashboard(): Promise<void> {
+    if (!await this.leaveSession()) return;
+    this.questions = [];
+    this.resetSession();
+    await this.renderScopeSelection();
   }
 
   // ========================================
