@@ -3,6 +3,9 @@ import { TFolder, Vault } from "obsidian";
 export async function ensureFolder(vault: Vault, path: string): Promise<void> {
   if (vault.getAbstractFileByPath(path) instanceof TFolder) return;
 
+  const separator = path.lastIndexOf("/");
+  if (separator > 0) await ensureFolder(vault, path.slice(0, separator));
+
   try {
     await vault.createFolder(path);
   } catch (error) {

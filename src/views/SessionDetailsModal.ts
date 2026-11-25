@@ -1,6 +1,5 @@
 import { App, Modal, Notice } from "obsidian";
 import { HistoryRetryMode, SessionRecord } from "../types";
-import { sourceLabel } from "../services/QuestionIdentity";
 import { SessionService } from "../services/SessionService";
 import { DiscardSessionModal } from "./DiscardSessionModal";
 import { formatSessionDate } from "./sessionFormatting";
@@ -51,7 +50,7 @@ export class SessionDetailsModal extends Modal {
     const root = this.contentEl;
     root.createEl("p", { text: `開始日時 ${formatSessionDate(startedAt)}` });
 
-    const sources = [...new Set(questions.map(question => sourceLabel(question.source)))];
+    const sources = [...new Set(questions.map(question => question.source))];
     root.createEl("p", { text: `出典 ${sources.join("、")}` });
     const percentage = result.accuracy === null ? "—" : `${result.accuracy.toFixed(1)}%`;
     root.createEl("p", {
@@ -117,7 +116,7 @@ export class SessionDetailsModal extends Modal {
     const body = table.createEl("tbody");
     for (const question of questions) {
       const row = body.createEl("tr");
-      row.createEl("td", { text: sourceLabel(question.source) });
+      row.createEl("td", { text: question.source });
       row.createEl("td", { text: question.id });
       const selected = question.unknown ? "わからない" : question.selected.join(", ") || "—";
       row.createEl("td", { text: selected });

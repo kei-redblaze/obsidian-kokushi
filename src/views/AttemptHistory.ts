@@ -1,5 +1,5 @@
 import type { Attempt, QuestionReference } from "../types";
-import { questionKey, sourceLabel } from "../services/QuestionIdentity";
+import { questionKey } from "../services/QuestionIdentity";
 import { formatSessionDate } from "./sessionFormatting";
 
 export function renderInvalidAttempts(root: HTMLElement, invalidLines: number): void {
@@ -30,7 +30,7 @@ export function renderAttemptHistory(
   const body = table.createEl("tbody");
   for (const attempt of attempts) {
     const row = body.createEl("tr");
-    row.createEl("td", { text: sourceLabel(attempt.source) });
+    row.createEl("td", { text: attempt.source });
     const idCell = row.createEl("td");
     if (availableIds.has(questionKey(attempt))) {
       const button = idCell.createEl("button", { text: attempt.id, cls: "kokushi-dashboard-link" });

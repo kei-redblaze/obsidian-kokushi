@@ -150,14 +150,14 @@ export class SessionService {
 
     for (const file of this.getFiles()) {
       if (this.activeDrafts.has(file.basename)) continue;
-      let record: SessionRecord | null;
+      let record: SessionRecord;
       try {
         record = await this.readSession(file);
       } catch {
         // 読み込めない行はダッシュボードの履歴で通知する。
         continue;
       }
-      if (record?.status === "in-progress" && record.currentIndex !== undefined) {
+      if (record.status === "in-progress" && record.currentIndex !== undefined) {
         drafts.push({
           id: record.id,
           recordedAt: record.recordedAt,
@@ -182,7 +182,6 @@ export class SessionService {
     for (const file of this.getFiles()) {
       try {
         const record = await this.readSession(file);
-        if (!record) continue;
         if (sessions.length === limit) return { sessions, invalid, hasMore: true };
 
         sessions.push({
@@ -214,11 +213,8 @@ export class SessionService {
       .sort((a, b) => b.name.localeCompare(a.name));
   }
 
-  private async readSession(file: TFile): Promise<SessionRecord | null> {
+  private async readSession(file: TFile): Promise<SessionRecord> {
     const value: unknown = JSON.parse(await this.vault.cachedRead(file));
-    if (typeof value === "object" && value !== null && "schemaVersion" in value && value.schemaVersion === 1) {
-      return null;
-    }
     if (!isSessionRecord(value, file.basename)) throw new Error("演習履歴の形式が不正です");
     return value;
   }

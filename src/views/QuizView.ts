@@ -23,7 +23,7 @@ import { ALL_PRACTICE_TARGETS, latestAttemptResults, practiceTarget } from "../s
 import { GradingService } from "../services/GradingService";
 import { AttemptService } from "../services/AttemptService";
 import { SessionService } from "../services/SessionService";
-import { questionKey, sourceLabel } from "../services/QuestionIdentity";
+import { questionKey } from "../services/QuestionIdentity";
 import { renderDraftList } from "./DraftList";
 import { DiscardSessionModal } from "./DiscardSessionModal";
 import { renderQuestionStudy } from "./QuestionStudyPanel";
@@ -34,11 +34,6 @@ export const VIEW_TYPE_KOKUSHI = "kokushi-quiz";
 // ========================================
 // 型定義
 // ========================================
-
-type Option = {
-  id: string;
-  markdown: string;
-};
 
 type OrderMode = "sequential" | "random";
 
@@ -516,7 +511,7 @@ export class QuizView extends ItemView {
       const button = sourceRow.createEl(
         "button",
         {
-          text: sourceLabel(source),
+          text: source,
           cls: "kokushi-scope-button",
         }
       );
@@ -912,7 +907,7 @@ export class QuizView extends ItemView {
       for (const item of record.questions) {
         const question = available.get(questionKey(item));
         if (!question) {
-          new Notice(`${sourceLabel(item.source)}の問題 ${item.id} が見つからないため、演習を再開できません。`);
+          new Notice(`${item.source}の問題 ${item.id} が見つからないため、演習を再開できません。`);
           return false;
         }
         questions.push(question);
@@ -1073,143 +1068,18 @@ export class QuizView extends ItemView {
     return this.questions[this.index] ?? null;
   }
 
-  // ========================================
-  // 必要選択数
-  // ========================================
+  private canSubmit(question: Question): boolean {
+    if (this.saving || this.graded !== null) return false;
+    if (this.unknown) return true;
 
-  private getRequiredChoices(
-    question: Question
-  ): number {
-    if (
-      question.type === "single" ||
-      question.type === "numeric"
-    ) {
-      return 1;
-    }
-
-    return question.answer[0]?.length ?? 0;
-  }
-
-  // ========================================
-  // 解答可能判定
-  // ========================================
-
-  private canSubmit(
-    question: Question
-  ): boolean {
-    if (
-      this.saving ||
-      this.graded !== null
-    ) {
-      return false;
-    }
-
-    // 「わからない」は採点可能
-    if (this.unknown) {
-      return true;
-    }
-
-    // 数値解答
     if (question.type === "numeric") {
-      return (
-        this.selected.length === 1 &&
-        /^\d+$/.test(
-          this.selected[0] ?? ""
-        )
-      );
+      return this.selected.length === 1 && /^\d+$/.test(this.selected[0] ?? "");
     }
 
-    // 採点除外問題
-    if (
-      question.excluded &&
-      question.answer.length === 0
-    ) {
-      return this.selected.length > 0;
-    }
-
-    const required =
-      this.getRequiredChoices(question);
-
-    return (
-      required > 0 &&
-      this.selected.length === required &&
-      new Set(this.selected).size === required
-    );
-  }
-
-  // ========================================
-  // Markdownセクション取得
-  // ========================================
-
-  private getSection(
-    markdown: string,
-    heading: string
-  ): string {
-    const lines = markdown.split(/\r?\n/);
-
-    const start = lines.findIndex(
-      line => line.trim() === `## ${heading}`
-    );
-
-    if (start === -1) {
-      return "";
-    }
-
-    const result: string[] = [];
-
-    for (
-      let i = start + 1;
-      i < lines.length;
-      i++
-    ) {
-      const line = lines[i] ?? "";
-
-      if (/^#{1,2}\s+/.test(line)) {
-        break;
-      }
-
-      result.push(line);
-    }
-
-    return result.join("\n").trim();
-  }
-
-  // ========================================
-  // 選択肢解析
-  // ========================================
-
-  private parseOptions(
-    markdown: string
-  ): Option[] {
-    const lines = markdown.split(/\r?\n/);
-
-    const options: Option[] = [];
-    let current: Option | null = null;
-
-    for (const line of lines) {
-      const match = line.match(
-        /^\s*(?:[-*]\s+)?([a-z])[.．]\s+(.+)$/
-      );
-
-      if (match) {
-        if (current) {
-          options.push(current);
-        }
-
-        current = {
-          id: match[1] ?? "",
-          markdown: match[2] ?? "",
-        };
-      } else if (current) {
-        current.markdown += "\n" + line;
-      }
-    }
-
-    if (current) {
-      options.push(current);
-    }
-
-    return options;
+    const count = this.selected.length;
+    return count > 0 && (question.requiredChoices === null || count === question.requiredChoices) &&
+      new Set(this.selected).size === count &&
+      this.selected.every(id => question.options.some(option => option.id === id));
   }
 
   // ========================================
@@ -1276,44 +1146,23 @@ export class QuizView extends ItemView {
     // 問題文
     // ========================================
 
-    const questionMarkdown =
-      this.getSection(
-        question.markdown,
-        "Question"
-      );
+    const questionEl = container.createDiv({ cls: "kokushi-question" });
+    await MarkdownRenderer.render(this.app, question.stem, questionEl, question.path, this);
 
-    const questionEl = container.createDiv({
-      cls: "kokushi-question",
+    if (this.closing || !container.contains(questionEl)) return;
+    questionEl.querySelectorAll("table").forEach(table => {
+      const parent = table.parentElement;
+      const wrapper = parent?.classList.contains("table-wrapper") ? parent : questionEl.createDiv();
+      wrapper.addClass("kokushi-question-table");
+      wrapper.tabIndex = 0;
+      wrapper.setAttribute("role", "region");
+      wrapper.setAttribute("aria-label", "問題文の表");
+      if (wrapper !== parent) {
+        table.before(wrapper);
+        wrapper.appendChild(table);
+      }
     });
-
-    if (questionMarkdown) {
-      await MarkdownRenderer.render(
-        this.app,
-        questionMarkdown,
-        questionEl,
-        question.path,
-        this
-      );
-
-      if (this.closing || !container.contains(questionEl)) return;
-      questionEl.querySelectorAll("table").forEach(table => {
-        const parent = table.parentElement;
-        const wrapper = parent?.classList.contains("table-wrapper") ? parent : questionEl.createDiv();
-        wrapper.addClass("kokushi-question-table");
-        wrapper.tabIndex = 0;
-        wrapper.setAttribute("role", "region");
-        wrapper.setAttribute("aria-label", "問題文の表");
-        if (wrapper !== parent) {
-          table.before(wrapper);
-          wrapper.appendChild(table);
-        }
-      });
-      this.stopWatchingImages = arrangeQuestionImages(questionEl);
-    } else {
-      questionEl.createEl("p", {
-        text: "問題文が見つかりません。",
-      });
-    }
+    this.stopWatchingImages = arrangeQuestionImages(questionEl);
 
     // ========================================
     // 解答エリア
@@ -1333,23 +1182,9 @@ export class QuizView extends ItemView {
     };
 
     if (question.type === "numeric") {
-      this.renderNumericInput(
-        answerEl,
-        updateSubmit
-      );
+      this.renderNumericInput(answerEl, updateSubmit, question.excluded);
     } else {
-      const optionsMarkdown =
-        this.getSection(
-          question.markdown,
-          "Options"
-        );
-
-      await this.renderOptions(
-        answerEl,
-        question,
-        optionsMarkdown,
-        updateSubmit
-      );
+      await this.renderOptions(answerEl, question, updateSubmit);
     }
 
     if (this.closing || !container.contains(answerEl)) return;
@@ -1433,6 +1268,7 @@ export class QuizView extends ItemView {
         }
 
         await this.submitAnswer(question);
+        updateSubmit();
       };
     } else {
       this.memoEditor = this.renderResult(container, question);
@@ -1483,29 +1319,14 @@ export class QuizView extends ItemView {
   private async renderOptions(
     container: HTMLElement,
     question: Question,
-    markdown: string,
     updateSubmit: () => void
   ): Promise<void> {
-    const options = this.parseOptions(markdown);
-
-    if (options.length === 0) {
-      container.createEl("p", {
-        text: "選択肢が見つかりません。",
-      });
-
-      return;
-    }
-
-    const required =
-      this.getRequiredChoices(question);
-
-    const guide =
-      question.excluded &&
-      question.answer.length === 0
-        ? "解答を選択してください（採点除外）。"
-        : question.type === "single"
-          ? "1つ選択してください。"
-          : `${required}つ選択してください。`;
+    const required = question.requiredChoices;
+    const guide = question.excluded
+      ? "解答を選択してください（採点除外）。"
+      : required === null
+        ? "該当するものをすべて選んでください。"
+        : `${required}つ選択してください。`;
 
     container.createEl("p", {
       text: guide,
@@ -1513,7 +1334,7 @@ export class QuizView extends ItemView {
 
     const inputs: HTMLInputElement[] = [];
 
-    for (const option of options) {
+    for (const option of question.options) {
       const label = container.createEl(
         "label",
         {
@@ -1572,7 +1393,7 @@ export class QuizView extends ItemView {
           // 複数選択
           if (input.checked) {
             if (
-              required > 0 &&
+              required !== null &&
               this.selected.length >= required
             ) {
               input.checked = false;
@@ -1610,10 +1431,11 @@ export class QuizView extends ItemView {
 
   private renderNumericInput(
     container: HTMLElement,
-    updateSubmit: () => void
+    updateSubmit: () => void,
+    excluded: boolean,
   ): void {
     container.createEl("p", {
-      text: "数値を入力してください。",
+      text: excluded ? "数値を入力してください（採点除外）。" : "数値を入力してください。",
     });
 
     const input = container.createEl("input", {
@@ -1669,18 +1491,37 @@ export class QuizView extends ItemView {
     if (!session || this.saving || this.closing || this.getCurrentQuestion() !== question) return;
 
     this.saving = true;
-    const selected = [...this.selected];
-    const wasUnknown = this.unknown;
+    let latest: Question;
+    try {
+      latest = await this.questionService.reload(question);
+    } catch (error) {
+      this.saving = false;
+      const reason = error instanceof Error ? error.message : "問題を読み込めませんでした";
+      if (!this.closing) new Notice(`${question.path} — ${reason}`, 10000);
+      return;
+    }
+    if (this.session !== session || this.closing) {
+      this.saving = false;
+      return;
+    }
 
-    const result: GradeResult =
-      question.excluded
-        ? "excluded"
-        : wasUnknown
-          ? "incorrect"
-          : GradingService.grade(
-              question,
-              selected
-            );
+    if (latest.type !== question.type || latest.requiredChoices !== question.requiredChoices ||
+        latest.stem !== question.stem || JSON.stringify(latest.options) !== JSON.stringify(question.options)) {
+      this.questions[this.index] = latest;
+      this.saving = false;
+      this.resetAnswer();
+      this.scheduleDraftSave(true);
+      new Notice("問題の表示内容または入力形式が更新されました。解答し直してください。");
+      await this.renderQuiz(false);
+      return;
+    }
+
+    const selected = [...this.selected];
+    const result: GradeResult = latest.excluded
+      ? "excluded"
+      : this.unknown
+        ? "incorrect"
+        : GradingService.grade(latest, selected);
 
     try {
       const write = this.attemptService.save({
@@ -1699,6 +1540,7 @@ export class QuizView extends ItemView {
       this.pendingOperation = null;
 
       if (this.session !== session) return;
+      this.questions[this.index] = latest;
       this.graded = result;
       this.saving = false;
 
@@ -2174,7 +2016,7 @@ export class QuizView extends ItemView {
       // 問題番号リンク
       // ------------------------------------
 
-      row.createEl("td", { text: sourceLabel(question.source) });
+      row.createEl("td", { text: question.source });
       const idCell = row.createEl("td");
 
       const linkButton =
@@ -2337,7 +2179,7 @@ export class QuizView extends ItemView {
 
     if (!question) {
       new Notice(
-        `${sourceLabel(reference.source)}の問題 ${reference.id} が見つかりません`
+        `${reference.source}の問題 ${reference.id} が見つかりません`
       );
 
       return;

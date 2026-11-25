@@ -1,8 +1,7 @@
-import { isQuestionNumber, readYamlQuestionNumber } from "./QuestionIdentity";
 import { App, Platform, TAbstractFile, TFile, TFolder, WorkspaceLeaf } from "obsidian";
-import { isMap, isScalar, isSeq, parseDocument, Scalar } from "yaml";
+import { Document, isMap, isScalar, isSeq, parseDocument, Scalar } from "yaml";
 import { PATHS } from "../constants";
-import { Question } from "../types";
+import { QuestionReference } from "../types";
 import { ensureFolder } from "./VaultFolder";
 
 interface QuestionStudy {
@@ -16,74 +15,53 @@ export class QuestionStudyService {
 
   constructor(private app: App) {}
 
-  async load(question: Question): Promise<QuestionStudy> {
+  async load(question: QuestionReference): Promise<QuestionStudy> {
     await this.pending;
-    const doc = parseMetadata(await this.app.vault.cachedRead(this.getMetadataFile(question)), question.id);
+    const file = this.getStudyFile(this.studyPath(question));
+    if (!file) return { memo: "", relatedNotes: [] };
+
+    const doc = parseStudy(await this.app.vault.cachedRead(file));
     const memo: unknown = doc.get("memo");
-    const node = doc.get("relatedNotes", true);
-    const relatedNotes = isSeq(node)
-      ? node.items.flatMap(item => isScalar(item) && isNotePath(item.value) ? [item.value] : [])
-      : [];
     return {
       memo: typeof memo === "string" ? memo : "",
-      relatedNotes: [...new Set(relatedNotes)],
+      relatedNotes: [...new Set(noteLinks(doc).map(link => link.value).filter(isNotePath))],
     };
   }
 
-  saveMemo(question: Question, memo: string): Promise<void> {
-    return this.enqueue(async () => {
-      await this.app.vault.process(this.getMetadataFile(question), data => {
-        const doc = parseMetadata(data, question.id);
-        const value = memo.replace(/\r\n?/g, "\n");
-        const existing = doc.get("memo", true);
-        if (isScalar(existing) && existing.value === value && existing.type === Scalar.QUOTE_DOUBLE) {
-          return data;
-        }
+  saveMemo(question: QuestionReference, memo: string): Promise<void> {
+    const value = memo.replace(/\r\n?/g, "\n");
+    return this.updateStudy(question, Boolean(value), doc => {
+      const existing = doc.get("memo", true);
+      if (isScalar(existing) && existing.value === value && existing.type === Scalar.QUOTE_DOUBLE) return false;
 
-        const node = isScalar(existing) ? existing : new Scalar(value);
-        node.value = value;
-        node.type = Scalar.QUOTE_DOUBLE;
-        // メモは YAML の明示タグの有無にかかわらず文字列として保存する。
-        delete node.tag;
-        doc.set("memo", node);
-        return doc.toString({ lineWidth: 0 });
-      });
+      const node = new Scalar(value);
+      node.type = Scalar.QUOTE_DOUBLE;
+      doc.set("memo", node);
+      return true;
     });
   }
 
-  async linkNote(question: Question, note: TFile): Promise<QuestionStudy> {
-    await this.enqueue(async () => {
-      await this.app.vault.process(this.getMetadataFile(question), data => {
-        const path = note.path;
-        if (this.getNote(path) !== note) throw new Error("関連付けられるノートが見つかりません");
-        const doc = parseMetadata(data, question.id);
-        if (!doc.has("relatedNotes")) doc.set("relatedNotes", doc.createNode([]));
-        const links = noteLinks(doc);
-        if (links.some(link => link.value === path)) return data;
+  async linkNote(question: QuestionReference, note: TFile): Promise<QuestionStudy> {
+    await this.updateStudy(question, true, doc => {
+      const path = note.path;
+      if (this.getNote(path) !== note) throw new Error("関連付けられるノートが見つかりません");
+      if (noteLinks(doc).some(link => link.value === path)) return false;
 
-        doc.addIn(["relatedNotes"], new Scalar(path));
-        return doc.toString({ lineWidth: 0 });
-      });
+      if (!doc.has("relatedNotes")) doc.set("relatedNotes", doc.createNode([]));
+      doc.addIn(["relatedNotes"], new Scalar(path));
+      return true;
     });
     return this.load(question);
   }
 
-  async unlinkNotes(question: Question, paths: string[]): Promise<QuestionStudy> {
+  async unlinkNotes(question: QuestionReference, paths: string[]): Promise<QuestionStudy> {
     const selected = new Set(paths);
-    await this.enqueue(async () => {
-      await this.app.vault.process(this.getMetadataFile(question), data => {
-        const doc = parseMetadata(data, question.id);
-        const links = noteLinks(doc);
-        let changed = false;
-        for (let index = links.length - 1; index >= 0; index--) {
-          const link = links[index];
-          if (link && selected.has(link.value)) {
-            links.splice(index, 1);
-            changed = true;
-          }
-        }
-        return changed ? doc.toString({ lineWidth: 0 }) : data;
-      });
+    await this.updateStudy(question, false, doc => {
+      const links = noteLinks(doc);
+      const remaining = links.filter(link => !selected.has(link.value));
+      if (remaining.length === links.length) return false;
+      doc.set("relatedNotes", doc.createNode(remaining));
+      return true;
     });
     return this.load(question);
   }
@@ -152,17 +130,16 @@ export class QuestionStudyService {
     let failed = 0;
     await this.enqueue(async () => {
       for (const metadata of this.app.vault.getFiles()) {
-        if (!metadata.path.startsWith(`${PATHS.questions}/`) ||
-            metadata.extension !== "yaml" || !isQuestionNumber(metadata.basename)) continue;
+        if (!metadata.path.startsWith(`${PATHS.study}/`) || metadata.extension !== "yaml") continue;
 
         try {
           const raw = await this.app.vault.cachedRead(metadata);
           if (!raw.includes("relatedNotes")) continue;
-          const links = noteLinks(parseMetadata(raw, metadata.basename));
+          const links = noteLinks(parseStudy(raw));
           if (!links.some(link => replacePath(link.value) !== link.value)) continue;
 
           await this.app.vault.process(metadata, data => {
-            const doc = parseMetadata(data, metadata.basename);
+            const doc = parseStudy(data);
             let changed = false;
             for (const link of noteLinks(doc)) {
               const updated = replacePath(link.value);
@@ -182,11 +159,47 @@ export class QuestionStudyService {
     return failed;
   }
 
-  private getMetadataFile(question: Question): TFile {
-    const path = question.path.replace(/\.md$/, ".yaml");
+  private studyPath(question: QuestionReference): string {
+    return `${PATHS.study}/${question.source}/${question.id}.yaml`;
+  }
+
+  private getStudyFile(path: string): TFile | null {
     const file = this.app.vault.getAbstractFileByPath(path);
-    if (!(file instanceof TFile)) throw new Error("問題のYAMLファイルが見つかりません");
-    return file;
+    if (file instanceof TFile || file === null) return file;
+    throw new Error("問題の学習データの保存先がファイルではありません");
+  }
+
+  private updateStudy(
+    question: QuestionReference,
+    create: boolean,
+    update: (doc: Document) => boolean,
+  ): Promise<void> {
+    return this.enqueue(async () => {
+      const path = this.studyPath(question);
+      let file = this.getStudyFile(path);
+      if (!file && create) {
+        await ensureFolder(this.app.vault, `${PATHS.study}/${question.source}`);
+        file = this.getStudyFile(path);
+        if (!file) {
+          const doc = new Document({});
+          if (!update(doc)) return;
+          try {
+            await this.app.vault.create(path, doc.toString({ lineWidth: 0 }));
+            return;
+          } catch (error) {
+            // 同期などで先に作成された場合は既存ファイルへ変更を適用する。
+            file = this.getStudyFile(path);
+            if (!file) throw error;
+          }
+        }
+      }
+      if (file) {
+        await this.app.vault.process(file, data => {
+          const doc = parseStudy(data);
+          return update(doc) ? doc.toString({ lineWidth: 0 }) : data;
+        });
+      }
+    });
   }
 
   private enqueue(task: () => Promise<void>): Promise<void> {
@@ -200,22 +213,15 @@ function isNotePath(path: unknown): path is string {
   return typeof path === "string" && path.startsWith(`${PATHS.notes}/`) && /\.md$/i.test(path);
 }
 
-function parseMetadata(data: string, id: string) {
+function parseStudy(data: string): Document {
   const doc = parseDocument(data);
-  const idNode = doc.get("id", true);
-  if (doc.errors.length || !isMap(doc.contents) || !isScalar(idNode) || readYamlQuestionNumber(idNode) !== id) {
-    throw new Error("問題YAMLの形式または問題IDが不正です");
-  }
-  // 数値で解釈されたIDの先頭のゼロを、YAMLを書き戻すときも保持する。
-  if (typeof idNode.value === "number") {
-    idNode.value = id;
-    idNode.type = Scalar.QUOTE_DOUBLE;
-    delete idNode.tag;
+  if (doc.errors.length || !isMap(doc.contents)) {
+    throw new Error("問題の学習データのYAMLが不正です");
   }
   return doc;
 }
 
-function noteLinks(doc: ReturnType<typeof parseMetadata>): Scalar<string>[] {
+function noteLinks(doc: Document): Scalar<string>[] {
   const node = doc.get("relatedNotes", true);
   if (node === undefined) return [];
 

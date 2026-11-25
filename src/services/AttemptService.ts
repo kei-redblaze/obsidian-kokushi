@@ -82,9 +82,6 @@ export class AttemptService {
       if (!line.trim()) continue;
       try {
         const value: unknown = JSON.parse(line);
-        // 出典を持たない旧形式は集計対象外。
-        if (typeof value === "object" && value !== null && "id" in value &&
-            typeof value.id === "string" && !("source" in value)) continue;
         if (isAttempt(value)) attempts.push(value);
         else invalidLines++;
       } catch {

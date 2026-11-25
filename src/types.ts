@@ -14,12 +14,19 @@ export interface QuestionReference {
   source: string;
 }
 
+export interface QuestionOption {
+  id: string;
+  markdown: string;
+}
+
 export interface Question extends QuestionReference {
   type: QuestionType;
   answer: string[][];
   excluded: boolean;
 
-  markdown: string;
+  requiredChoices: number | null;
+  stem: string;
+  options: QuestionOption[];
   path: string;
 }
 
