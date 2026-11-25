@@ -210,8 +210,6 @@ If your plugin does not need CSS, delete this file.
 
 .kokushi-question-study {
   margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--background-modifier-border);
 }
 
 .kokushi-study-field {
@@ -228,19 +226,26 @@ If your plugin does not need CSS, delete this file.
 }
 
 .kokushi-study-memo {
+  --kokushi-memo-border: var(--background-modifier-border-hover, var(--background-modifier-border));
   min-height: 4.5rem;
   padding: 8px 10px;
   resize: vertical;
   background-color: transparent;
   color: var(--text-normal);
-  border: 1px solid var(--background-modifier-border);
+  border: 1px solid var(--kokushi-memo-border);
   border-radius: 4px;
+}
+
+.kokushi-question-study textarea.kokushi-study-memo,
+.kokushi-question-study textarea.kokushi-study-memo:is(:hover, :focus, :focus-visible, :active) {
+  border: 1px solid var(--kokushi-memo-border);
+  outline: none;
   box-shadow: none;
 }
 
-.kokushi-study-memo:focus {
-  outline: 2px solid var(--interactive-accent);
-  outline-offset: 1px;
+.kokushi-study-memo::placeholder {
+  color: var(--kokushi-memo-border);
+  opacity: 1;
 }
 
 .kokushi-study-feedback:not(:empty) {
@@ -859,4 +864,30 @@ If your plugin does not need CSS, delete this file.
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+
+.kokushi-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.kokushi-section-heading > :is(h2, h3),
+.kokushi-section-heading > .kokushi-scope-actions {
+  margin: 0;
+}
+
+.kokushi-section-heading > button {
+  flex-shrink: 0;
+}
+
+.kokushi-history-actions .mod-warning {
+  background-color: var(--background-modifier-error);
+  color: var(--text-on-accent);
+}
+
+.kokushi-history-actions .mod-warning:hover:not(:disabled) {
+  background-color: var(--background-modifier-error-hover, var(--background-modifier-error));
 }
