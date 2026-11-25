@@ -128,6 +128,11 @@ export default class KokushiPlugin extends Plugin {
         async id => {
           const quiz = await getQuizView();
           await quiz.resumeDraft(id);
+        },
+
+        async () => {
+          const quiz = await getQuizView();
+          await quiz.openScopeFromDashboard();
         }
       )
     );
