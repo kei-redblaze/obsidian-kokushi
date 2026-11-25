@@ -21,6 +21,7 @@ export interface Question {
 
 export interface Attempt {
   id: string;
+  sessionId?: string;
   timestamp: string;
   selected: string[];
   correct: boolean | null;

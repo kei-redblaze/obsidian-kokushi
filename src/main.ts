@@ -27,7 +27,17 @@ export default class KokushiPlugin extends Plugin {
 
     const attemptService =
       new AttemptService(this.app);
-    const sessionService = new SessionService(this.app.vault);
+    const sessionService = new SessionService(
+      this.app.vault,
+      id => attemptService.discardSession(id),
+      file => this.app.fileManager.trashFile(file),
+    );
+    try {
+      await sessionService.recoverDiscards();
+    } catch (error) {
+      console.error("[Kokushi] Discard recovery error", error);
+      new Notice("保留中の履歴削除を完了できませんでした。");
+    }
     const studyService = new QuestionStudyService(this.app);
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
       void studyService.trackRename(file, oldPath).then(failed => {
@@ -108,12 +118,6 @@ export default class KokushiPlugin extends Plugin {
         statisticsService,
         sessionService,
 
-        // 未回答・誤答演習へ
-        async target => {
-          const quiz = await getQuizView();
-          await quiz.startFromDashboard(target);
-        },
-
         // 指定した問題へ
         async id => {
           const quiz = await getQuizView();
@@ -127,7 +131,17 @@ export default class KokushiPlugin extends Plugin {
 
         async id => {
           const quiz = await getQuizView();
-          await quiz.resumeDraft(id);
+          return quiz.resumeDraft(id);
+        },
+
+        async id => {
+          const leaf = sessionService.getActiveLeaf(id);
+          if (!leaf) {
+            new Notice("演習画面が見つかりませんでした。");
+            return false;
+          }
+          await this.app.workspace.revealLeaf(leaf);
+          return true;
         },
 
         async () => {
