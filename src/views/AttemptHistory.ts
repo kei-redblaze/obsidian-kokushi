@@ -1,6 +1,7 @@
 import type { Attempt, QuestionReference } from "../types";
 import { questionKey } from "../services/QuestionIdentity";
-import { formatSessionDate } from "./sessionFormatting";
+import { attemptGrade, attemptRating, PRACTICE_TARGET_LABELS } from "../services/PracticeTargets";
+import { renderHistoryDate, renderHistoryGrade } from "./sessionFormatting";
 
 export function renderInvalidAttempts(root: HTMLElement, invalidLines: number): void {
   if (invalidLines === 0) return;
@@ -23,7 +24,7 @@ export function renderAttemptHistory(
 
   const table = root.createEl("table", { cls: "kokushi-dashboard-history" });
   const header = table.createEl("thead").createEl("tr");
-  for (const title of ["出典", "問題", "日時", "解答", "判定"]) {
+  for (const title of ["出典", "問題", "日時", "解答", "評価", "採点結果"]) {
     header.createEl("th", { text: title, attr: { scope: "col" } });
   }
 
@@ -40,10 +41,9 @@ export function renderAttemptHistory(
       idCell.setText(attempt.id);
     }
 
-    row.createEl("td", { text: formatSessionDate(attempt.timestamp, "Asia/Tokyo") });
+    renderHistoryDate(row.createEl("td"), attempt.timestamp, "Asia/Tokyo");
     row.createEl("td", { text: attempt.selected.join(", ") });
-    row.createEl("td", {
-      text: attempt.correct === null ? "採点除外" : attempt.correct ? "正解" : "不正解",
-    });
+    row.createEl("td", { text: PRACTICE_TARGET_LABELS[attemptRating(attempt)] });
+    renderHistoryGrade(row.createEl("td"), attemptGrade(attempt));
   }
 }

@@ -29,7 +29,7 @@ export default class KokushiPlugin extends Plugin {
       new AttemptService(this.app);
     const sessionService = new SessionService(
       this.app.vault,
-      id => attemptService.discardSession(id),
+      attemptService,
       file => this.app.fileManager.trashFile(file),
     );
     try {

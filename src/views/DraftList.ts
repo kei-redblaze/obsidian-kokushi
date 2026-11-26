@@ -11,13 +11,11 @@ export function renderDraftList(
 ): void {
   const heading = root.createDiv({ cls: "kokushi-section-heading" });
   heading.createEl("h3", { text: "未完了の演習" });
-  const update = heading.createEl("button", { type: "button", text: "更新" });
   const content = root.createDiv();
   let generation = 0;
 
   const refresh = async (): Promise<void> => {
     const request = ++generation;
-    update.disabled = true;
     try {
       const drafts = await service.getDrafts();
       if (request !== generation) return;
@@ -44,10 +42,7 @@ export function renderDraftList(
       console.error("[Kokushi] Draft list error", error);
       content.empty();
       content.createEl("p", { text: "未完了の演習を読み込めませんでした。" });
-    } finally {
-      if (request === generation) update.disabled = false;
     }
   };
-  update.onclick = () => { void refresh(); };
   void refresh();
 }

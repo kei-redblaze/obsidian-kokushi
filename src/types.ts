@@ -26,6 +26,7 @@ export interface Question extends QuestionReference {
 
   requiredChoices: number | null;
   stem: string;
+  annotation: string;
   options: QuestionOption[];
   path: string;
 }
@@ -35,6 +36,7 @@ export interface Attempt extends QuestionReference {
   timestamp: string;
   selected: string[];
   correct: boolean | null;
+  rating?: PracticeTarget;
 }
 
 export interface SessionResult {
@@ -45,7 +47,7 @@ export interface SessionResult {
   accuracy: number | null;
 }
 
-export type PracticeTarget = "correct" | "incorrect" | "unanswered";
+export type PracticeTarget = "excellent" | "good" | "review" | "wrong" | "unanswered";
 
 export interface SessionRecord {
   schemaVersion: 2;
@@ -67,5 +69,9 @@ export interface SessionRecord {
     unknown: boolean;
   })[];
 }
+
+export type SessionDetails = Omit<SessionRecord, "questions"> & {
+  questions: (SessionRecord["questions"][number] & { rating: PracticeTarget })[];
+};
 
 export type HistoryRetryMode = "all" | "incorrect";

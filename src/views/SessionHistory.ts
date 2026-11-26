@@ -2,7 +2,7 @@ import { App } from "obsidian";
 import { DASHBOARD_HISTORY_LIMIT } from "../constants";
 import { SessionService } from "../services/SessionService";
 import { openSessionDetails, SessionDetailActions } from "./SessionDetailsModal";
-import { formatSessionDate } from "./sessionFormatting";
+import { formatSessionDate, renderHistoryDate } from "./sessionFormatting";
 
 const STATUS_LABELS = {
   completed: "完了",
@@ -47,7 +47,7 @@ export async function renderSessionHistory(
       const { startedAt, total, result } = item;
       const row = body.createEl("tr");
       const date = formatSessionDate(startedAt);
-      row.createEl("td", { text: date });
+      renderHistoryDate(row.createEl("td"), startedAt);
       const button = row.createEl("td").createEl("button", {
         type: "button",
         text: STATUS_LABELS[item.status],
@@ -64,7 +64,10 @@ export async function renderSessionHistory(
       };
 
       const accuracy = result.accuracy === null ? "—" : `${result.accuracy.toFixed(1)}%`;
-      for (const value of [total, result.correct, result.incorrect, result.unanswered, result.excluded, accuracy]) {
+      row.createEl("td", { text: String(total) });
+      row.createEl("td", { text: String(result.correct), cls: "kokushi-result-grade is-correct" });
+      row.createEl("td", { text: String(result.incorrect), cls: "kokushi-result-grade is-incorrect" });
+      for (const value of [result.unanswered, result.excluded, accuracy]) {
         row.createEl("td", { text: String(value) });
       }
     }

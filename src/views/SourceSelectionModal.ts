@@ -1,0 +1,61 @@
+import { App, Modal } from "obsidian";
+
+export class SourceSelectionModal extends Modal {
+  constructor(
+    app: App,
+    private sources: string[],
+    private initial: string[] | null,
+    private apply: (selected: string[] | null) => void,
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.setTitle("出典を選択");
+    const selected = new Set(this.initial ?? this.sources);
+    const root = this.contentEl;
+    root.addClass("kokushi-source-modal");
+    const actions = root.createDiv({ cls: "kokushi-source-modal-tools" });
+    const all = actions.createEl("button", { type: "button", text: "全選択" });
+    const clear = actions.createEl("button", { type: "button", text: "全解除" });
+    const list = root.createDiv({
+      cls: "kokushi-source-modal-list",
+      attr: { role: "group", "aria-label": "出典一覧" },
+    });
+    const inputs = new Map<string, HTMLInputElement>();
+    for (const source of this.sources) {
+      const label = list.createEl("label");
+      const input = label.createEl("input", { type: "checkbox" });
+      input.checked = selected.has(source);
+      input.onchange = () => {
+        if (input.checked) selected.add(source);
+        else selected.delete(source);
+      };
+      label.createSpan({ text: source });
+      inputs.set(source, input);
+    }
+
+    const selectAll = (checked: boolean): void => {
+      selected.clear();
+      for (const [source, input] of inputs) {
+        input.checked = checked;
+        if (checked) selected.add(source);
+      }
+    };
+    all.onclick = () => selectAll(true);
+    clear.onclick = () => selectAll(false);
+
+    const footer = root.createDiv({ cls: "kokushi-source-modal-footer" });
+    const cancel = footer.createEl("button", { type: "button", text: "キャンセル" });
+    const apply = footer.createEl("button", { type: "button", cls: "mod-cta", text: "適用" });
+    cancel.onclick = () => this.close();
+    apply.onclick = () => {
+      this.apply(selected.size === this.sources.length ? null : this.sources.filter(source => selected.has(source)));
+      this.close();
+    };
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}

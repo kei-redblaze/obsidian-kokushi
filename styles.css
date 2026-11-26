@@ -533,6 +533,9 @@ If your plugin does not need CSS, delete this file.
 
 .kokushi-scope-group {
   margin: 18px 0;
+  padding: 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
 }
 
 .kokushi-scope-group h3 {
@@ -918,4 +921,64 @@ If your plugin does not need CSS, delete this file.
   white-space: normal;
   height: auto;
   min-height: 44px;
+}
+
+.kokushi-source-summary ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+  padding-inline-start: 20px;
+}
+
+.kokushi-source-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kokushi-source-modal-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.kokushi-source-modal-tools > button {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.kokushi-source-modal-list {
+  max-height: min(52dvh, 28rem);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.kokushi-source-modal-list > label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.kokushi-source-modal-list > label > input {
+  flex-shrink: 0;
+}
+
+.kokushi-source-modal-footer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.kokushi-history-date {
+  display: inline-grid;
+  white-space: nowrap;
+}
+
+.kokushi-annotation {
+  margin-block: 12px;
+}
+
+.kokushi-annotation h4 {
+  margin: 0 0 6px;
 }

@@ -1,14 +1,15 @@
 import { Question, QuestionOption } from "../types";
 
-const SECTION_NAMES = ["Question", "Options", "Answer"] as const;
+const SECTION_NAMES = ["Question", "Options", "Answer", "Annotation"] as const;
 type SectionName = typeof SECTION_NAMES[number];
 const OPTION_LINE = /^\s*(?:[-*]\s+)?([a-z])[.．]\s+(\S.*)$/;
 
-export function parseQuestionMarkdown(markdown: string): Pick<Question, "stem" | "options" | "type" | "answer" | "excluded" | "requiredChoices"> {
+export function parseQuestionMarkdown(markdown: string): Pick<Question, "stem" | "annotation" | "options" | "type" | "answer" | "excluded" | "requiredChoices"> {
   const sections = readSections(markdown);
   const stem = sections.get("Question")?.join("\n").trim();
   if (!stem) throw new Error("## Question に問題文を記述してください");
 
+  const annotation = sections.get("Annotation")?.join("\n").trim() ?? "";
   const answerSection = sections.get("Answer");
   if (!answerSection) throw new Error("## Answer 見出しがありません");
 
@@ -16,7 +17,7 @@ export function parseQuestionMarkdown(markdown: string): Pick<Question, "stem" |
   const options = optionsSection ? readOptions(optionsSection) : [];
   const answers = answerSection.join("\n").trim();
   if (!answers || answers === "採点除外") {
-    return { stem, options, type: optionsSection ? "multiple" : "numeric", answer: [], excluded: true, requiredChoices: null };
+    return { stem, annotation, options, type: optionsSection ? "multiple" : "numeric", answer: [], excluded: true, requiredChoices: null };
   }
 
   const groups = answers.split(/\n(?:[^\S\n]*\n)+/);
@@ -25,7 +26,7 @@ export function parseQuestionMarkdown(markdown: string): Pick<Question, "stem" |
     if (!values.every(value => /^\d+$/.test(value))) {
       throw new Error("数値の正答は半角数字だけを1行に記述し、候補を空行で区切ってください");
     }
-    return { stem, options, type: "numeric", answer: values.map(value => [value]), excluded: false, requiredChoices: 1 };
+    return { stem, annotation, options, type: "numeric", answer: values.map(value => [value]), excluded: false, requiredChoices: 1 };
   }
 
   const optionIds = new Set(options.map(option => option.id));
@@ -41,7 +42,7 @@ export function parseQuestionMarkdown(markdown: string): Pick<Question, "stem" |
   });
   const sizes = new Set(answer.map(group => group.length));
   return {
-    stem, options, type: sizes.size === 1 && sizes.has(1) ? "single" : "multiple", answer, excluded: false,
+    stem, annotation, options, type: sizes.size === 1 && sizes.has(1) ? "single" : "multiple", answer, excluded: false,
     requiredChoices: sizes.size === 1 ? answer[0]?.length ?? null : null,
   };
 }

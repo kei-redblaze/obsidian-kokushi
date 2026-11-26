@@ -1,14 +1,9 @@
 import { App, Modal, Notice } from "obsidian";
-import { HistoryRetryMode, SessionRecord } from "../types";
+import { HistoryRetryMode, SessionDetails, SessionRecord } from "../types";
 import { SessionService } from "../services/SessionService";
 import { DiscardSessionModal } from "./DiscardSessionModal";
-import { formatSessionDate } from "./sessionFormatting";
-
-const GRADE_LABELS = {
-  correct: "正解",
-  incorrect: "不正解",
-  excluded: "採点除外",
-};
+import { PRACTICE_TARGET_LABELS } from "../services/PracticeTargets";
+import { renderHistoryDate, renderHistoryGrade } from "./sessionFormatting";
 
 export interface SessionDetailActions {
   retry: (record: SessionRecord, mode: HistoryRetryMode) => Promise<boolean>;
@@ -37,7 +32,7 @@ export async function openSessionDetails(
 export class SessionDetailsModal extends Modal {
   constructor(
     app: App,
-    private record: SessionRecord,
+    private record: SessionDetails,
     private service: SessionService,
     private actions: SessionDetailActions,
   ) {
@@ -48,14 +43,18 @@ export class SessionDetailsModal extends Modal {
     const { startedAt, result, questions } = this.record;
     this.setTitle("演習履歴の詳細");
     const root = this.contentEl;
-    root.createEl("p", { text: `開始日時 ${formatSessionDate(startedAt)}` });
+    const date = root.createEl("p", { text: "開始日時" });
+    renderHistoryDate(date, startedAt);
 
     const sources = [...new Set(questions.map(question => question.source))];
     root.createEl("p", { text: `出典 ${sources.join("、")}` });
     const percentage = result.accuracy === null ? "—" : `${result.accuracy.toFixed(1)}%`;
-    root.createEl("p", {
-      text: `全${questions.length}問、正解${result.correct}問、不正解${result.incorrect}問、` +
-        `未採点${result.unanswered}問、採点除外${result.excluded}問、正答率 ${percentage}`,
+    const summary = root.createEl("p", { text: `全${questions.length}問、正解` });
+    summary.createSpan({ text: String(result.correct), cls: "kokushi-result-grade is-correct" });
+    summary.createSpan({ text: "問、不正解" });
+    summary.createSpan({ text: String(result.incorrect), cls: "kokushi-result-grade is-incorrect" });
+    summary.createSpan({
+      text: `問、未採点${result.unanswered}問、採点除外${result.excluded}問、正答率 ${percentage}`,
     });
 
     const actions = root.createDiv({ cls: "kokushi-history-actions" });
@@ -109,7 +108,7 @@ export class SessionDetailsModal extends Modal {
     const wrapper = root.createDiv({ cls: "kokushi-session-table-wrapper" });
     const table = wrapper.createEl("table", { cls: "kokushi-session-table" });
     const header = table.createEl("thead").createEl("tr");
-    for (const label of ["出典", "問題番号", "自分の解答", "採点結果"]) {
+    for (const label of ["出典", "問題番号", "自分の解答", "評価", "採点結果"]) {
       header.createEl("th", { text: label, attr: { scope: "col" } });
     }
 
@@ -120,9 +119,8 @@ export class SessionDetailsModal extends Modal {
       row.createEl("td", { text: question.id });
       const selected = question.unknown ? "わからない" : question.selected.join(", ") || "—";
       row.createEl("td", { text: selected });
-      row.createEl("td", {
-        text: question.grade === null ? "未採点" : GRADE_LABELS[question.grade],
-      });
+      row.createEl("td", { text: PRACTICE_TARGET_LABELS[question.rating] });
+      renderHistoryGrade(row.createEl("td"), question.grade);
     }
   }
 

@@ -1,8 +1,10 @@
 import { TFile, TFolder, Vault, WorkspaceLeaf } from "obsidian";
 import { ATTEMPTS_FOLDER, PATHS } from "../constants";
-import { SessionRecord, SessionResult } from "../types";
+import { SessionDetails, SessionRecord, SessionResult } from "../types";
 import { isQuestionReference, questionKey } from "./QuestionIdentity";
 import { ensureFolder } from "./VaultFolder";
+import { AttemptService } from "./AttemptService";
+import { ALL_PRACTICE_TARGETS, defaultRating, isPracticeTarget } from "./PracticeTargets";
 
 export interface SessionSummary {
   id: string;
@@ -29,7 +31,7 @@ export class SessionService {
 
   constructor(
     private vault: Vault,
-    private discardAttempts: (id: string) => Promise<void>,
+    private attempts: AttemptService,
     private trashFile: (file: TFile) => Promise<void>,
   ) {}
 
@@ -98,7 +100,7 @@ export class SessionService {
       if (this.vault.getAbstractFileByPath(staged)) throw new Error("削除処理がすでに登録されています");
       await this.vault.rename(file, staged);
       try {
-        await this.discardAttempts(id);
+        await this.attempts.discardSession(id);
       } catch (error) {
         await this.vault.rename(file, path);
         throw error;
@@ -122,7 +124,7 @@ export class SessionService {
       if (!(file instanceof TFile) || file.extension !== "json" || !file.basename.endsWith(".discarding")) continue;
       const id = file.basename.slice(0, -".discarding".length);
       if (!SESSION_ID.test(id)) continue;
-      await this.discardAttempts(id);
+      await this.attempts.discardSession(id);
       this.discarded.add(id);
       await this.finishDiscard(file);
     }
@@ -137,11 +139,19 @@ export class SessionService {
     }
   }
 
-  async getSession(id: string): Promise<SessionRecord | null> {
+  async getSession(id: string): Promise<SessionDetails | null> {
     if (!SESSION_ID.test(id)) return null;
     await this.pending;
     const file = this.vault.getAbstractFileByPath(`${PATHS.sessions}/${id}.json`);
-    return file instanceof TFile ? this.readSession(file) : null;
+    if (!(file instanceof TFile)) return null;
+    const [record, ratings] = await Promise.all([this.readSession(file), this.attempts.getSessionRatings(id)]);
+    return {
+      ...record,
+      questions: record.questions.map(question => ({
+        ...question,
+        rating: question.grade === null ? "unanswered" : ratings.get(questionKey(question)) ?? defaultRating(question.grade),
+      })),
+    };
   }
 
   async getDrafts(): Promise<DraftSummary[]> {
@@ -215,8 +225,10 @@ export class SessionService {
 
   private async readSession(file: TFile): Promise<SessionRecord> {
     const value: unknown = JSON.parse(await this.vault.cachedRead(file));
+    normalizeLegacyScope(value);
     if (!isSessionRecord(value, file.basename)) throw new Error("演習履歴の形式が不正です");
-    return value;
+    const { correct, incorrect, excluded } = value.result;
+    return { ...value, result: { ...value.result, accuracy: sessionAccuracy(correct, incorrect, excluded) } };
   }
 }
 
@@ -245,9 +257,9 @@ function isSessionRecord(value: unknown, id: string): value is SessionRecord {
     (scope.sources !== null && (!Array.isArray(scope.sources) || !scope.sources.every(source => typeof source === "string"))) ||
     (scope.order !== "sequential" && scope.order !== "random") ||
     (!Array.isArray(scope.targets) ||
-      scope.targets.length < 1 || scope.targets.length > 3 ||
+      scope.targets.length < 1 || scope.targets.length > ALL_PRACTICE_TARGETS.length ||
       new Set(scope.targets).size !== scope.targets.length ||
-      !scope.targets.every(target => target === "correct" || target === "incorrect" || target === "unanswered")) ||
+      !scope.targets.every(isPracticeTarget)) ||
     typeof result !== "object" || result === null
   ) return false;
 
@@ -264,4 +276,16 @@ function isSessionAnswer(value: unknown): value is SessionRecord["questions"][nu
   return Array.isArray(selected) && selected.every(item => typeof item === "string") &&
     typeof unknown === "boolean" &&
     (grade === null || grade === "correct" || grade === "incorrect" || grade === "excluded");
+}
+
+export function sessionAccuracy(correct: number, incorrect: number, excluded: number): number | null {
+  const total = correct + incorrect + excluded;
+  return total ? (correct + excluded) / total * 100 : null;
+}
+
+function normalizeLegacyScope(value: unknown): void {
+  if (typeof value !== "object" || value === null || !("scope" in value)) return;
+  const scope = value.scope;
+  if (typeof scope !== "object" || scope === null || !("targets" in scope) || !Array.isArray(scope.targets)) return;
+  scope.targets = scope.targets.map((target: unknown) => target === "correct" ? "good" : target === "incorrect" ? "wrong" : target);
 }

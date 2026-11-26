@@ -4,10 +4,11 @@ import {
   TFile,
 } from "obsidian";
 
-import { Attempt } from "../types";
+import { Attempt, PracticeTarget, QuestionReference } from "../types";
 import { ATTEMPTS_FOLDER, PATHS } from "../constants";
-import { isQuestionReference } from "./QuestionIdentity";
+import { isQuestionReference, questionKey } from "./QuestionIdentity";
 import { ensureFolder } from "./VaultFolder";
+import { attemptRating, isPracticeTarget } from "./PracticeTargets";
 
 export class AttemptService {
   private queue: Promise<void> = Promise.resolve();
@@ -44,6 +45,39 @@ export class AttemptService {
     this.queue = task.catch(() => {});
 
     return task;
+  }
+
+  async updateRating(sessionId: string, question: QuestionReference, rating: PracticeTarget): Promise<void> {
+    const task = this.queue.then(async () => {
+      const file = this.app.vault.getAbstractFileByPath(PATHS.attempts);
+      if (!(file instanceof TFile)) throw new Error("解答履歴が見つかりません");
+      const key = questionKey(question);
+      await this.app.vault.process(file, text => {
+        const lines = text.split(/(\r?\n)/);
+        for (let i = lines.length - 1; i >= 0; i -= 1) {
+          const line = lines[i];
+          if (!line?.trim()) continue;
+          let value: unknown;
+          try {
+            value = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (!isAttempt(value) || value.sessionId !== sessionId || questionKey(value) !== key) continue;
+          lines[i] = JSON.stringify({ ...value, rating });
+          return lines.join("");
+        }
+        throw new Error("この演習の解答が見つかりません");
+      });
+    });
+    this.queue = task.catch(() => {});
+    await task;
+  }
+
+  async getSessionRatings(sessionId: string): Promise<Map<string, PracticeTarget>> {
+    const attempts = await this.getAttempts();
+    return new Map(attempts.filter(attempt => attempt.sessionId === sessionId)
+      .map(attempt => [questionKey(attempt), attemptRating(attempt)]));
   }
 
   async discardSession(sessionId: string): Promise<void> {
@@ -94,8 +128,9 @@ export class AttemptService {
 
 function isAttempt(value: unknown): value is Attempt {
   if (!isQuestionReference(value)) return false;
-  const { timestamp, selected, correct } = value as Partial<Attempt>;
+  const { timestamp, selected, correct, rating } = value as Partial<Attempt>;
   return typeof timestamp === "string" && Number.isFinite(Date.parse(timestamp)) &&
     Array.isArray(selected) && selected.every(item => typeof item === "string") &&
-    (correct === null || typeof correct === "boolean");
+    (correct === null || typeof correct === "boolean") &&
+    (rating === undefined || isPracticeTarget(rating));
 }

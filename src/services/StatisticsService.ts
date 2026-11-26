@@ -3,6 +3,7 @@ import { DASHBOARD_HISTORY_LIMIT } from "../constants";
 import { Attempt } from "../types";
 import { AttemptService } from "./AttemptService";
 import { questionKey } from "./QuestionIdentity";
+import { attemptRating } from "./PracticeTargets";
 
 export type DailyStatistics = {
   date: string;
@@ -90,21 +91,15 @@ export class StatisticsService {
     }
 
     let latestCorrect = 0;
-    let latestGraded = 0;
     let reviewQuestions = 0;
 
     for (const attempt of latest.values()) {
-      if (attempt.correct === true) {
-        latestCorrect++;
-        latestGraded++;
-      } else if (attempt.correct === false) {
-        latestGraded++;
-        reviewQuestions++;
-      }
+      if (attempt.correct !== false) latestCorrect++;
+      const rating = attemptRating(attempt);
+      if (rating === "review" || rating === "wrong") reviewQuestions++;
     }
 
     let cumulativeCorrect = 0;
-    let cumulativeGraded = 0;
 
     // 日付別に全解答試行を集計
     const days = new Map<
@@ -113,13 +108,7 @@ export class StatisticsService {
     >();
 
     for (const attempt of attempts) {
-      if (attempt.correct !== null) {
-        cumulativeGraded++;
-
-        if (attempt.correct) {
-          cumulativeCorrect++;
-        }
-      }
+      if (attempt.correct !== false) cumulativeCorrect++;
 
       const date = dateKey(
         new Date(attempt.timestamp)
@@ -141,13 +130,8 @@ export class StatisticsService {
 
       day.attempts++;
 
-      if (attempt.correct !== null) {
-        day.graded++;
-
-        if (attempt.correct) {
-          day.correct++;
-        }
-      }
+      day.graded++;
+      if (attempt.correct !== false) day.correct++;
     }
 
     // 空白日を0回として埋める
@@ -201,21 +185,21 @@ export class StatisticsService {
           : null,
 
       latestCorrect,
-      latestGraded,
+      latestGraded: latest.size,
       latestAccuracy:
-        latestGraded > 0
+        latest.size > 0
           ? latestCorrect /
-            latestGraded * 100
+            latest.size * 100
           : null,
       reviewQuestions,
 
       totalAttempts: attempts.length,
       cumulativeCorrect,
-      cumulativeGraded,
+      cumulativeGraded: attempts.length,
       cumulativeAccuracy:
-        cumulativeGraded > 0
+        attempts.length > 0
           ? cumulativeCorrect /
-            cumulativeGraded * 100
+            attempts.length * 100
           : null,
 
       daily,

@@ -209,7 +209,7 @@ export class DashboardView extends ItemView {
     addCard(
       "要復習問題",
       `${stats.reviewQuestions}問`,
-      "最新解答が不正解"
+      "最新の評価が△または×"
     );
 
     addCard(
@@ -228,7 +228,7 @@ export class DashboardView extends ItemView {
 
     const scopeButton = quizActions.createEl("button", {
       type: "button",
-      text: "出題範囲を選択",
+      text: "出題範囲の選択へ",
       cls: "mod-cta kokushi-dashboard-scope",
     });
     scopeButton.onclick = () => {
@@ -246,24 +246,15 @@ export class DashboardView extends ItemView {
       text: "日別学習推移",
     });
 
-    const periodSelect = root.createEl("select");
-
+    const periodGroup = root.createDiv({
+      cls: "kokushi-scope-buttons",
+      attr: { role: "group", "aria-label": "日別学習推移の表示期間" },
+    });
     const periods = [
       { value: "7", text: "直近7日" },
       { value: "30", text: "直近30日" },
       { value: "all", text: "全期間" },
-    ];
-
-    for (const period of periods) {
-      const option =
-        periodSelect.createEl("option", {
-          text: period.text,
-        });
-
-      option.value = period.value;
-    }
-
-    periodSelect.value = this.period;
+    ] as const;
 
     const chartArea = root.createDiv({
       cls: "kokushi-dashboard-chart-area",
@@ -288,22 +279,24 @@ export class DashboardView extends ItemView {
       this.renderLineChart(accuracyChart, days);
     };
 
-    periodSelect.addEventListener(
-      "change",
-      () => {
-        const value = periodSelect.value;
-
-        if (
-          value === "7" ||
-          value === "30" ||
-          value === "all"
-        ) {
-          this.period = value;
-          updateCharts();
-        }
+    const periodButtons = periods.map(({ value, text }) => {
+      const button = periodGroup.createEl("button", { type: "button", text, cls: "kokushi-scope-button" });
+      button.onclick = () => {
+        if (this.period === value) return;
+        this.period = value;
+        syncPeriod();
+        updateCharts();
+      };
+      return { value, button };
+    });
+    const syncPeriod = (): void => {
+      for (const { value, button } of periodButtons) {
+        const active = this.period === value;
+        button.classList.toggle("is-selected", active);
+        button.setAttribute("aria-pressed", String(active));
       }
-    );
-
+    };
+    syncPeriod();
     updateCharts();
 
     const sessionSection = root.createDiv();
@@ -334,13 +327,13 @@ export class DashboardView extends ItemView {
     const root = this.contentEl;
     root.empty();
     root.scrollTop = 0;
-    const heading = root.createEl("h2", {
+    const header = root.createDiv({ cls: "kokushi-section-heading" });
+    const heading = header.createEl("h2", {
       text: kind === "sessions" ? "演習履歴" : "解答履歴",
       attr: { tabindex: "-1" },
     });
     heading.focus();
-    const back = root.createEl("button", { text: "ダッシュボードに戻る" });
-    back.type = "button";
+    const back = header.createEl("button", { type: "button", cls: "mod-cta", text: "ダッシュボードに戻る" });
     back.onclick = () => { void this.showOverview(); };
 
     const content = root.createDiv({ cls: "kokushi-history-page" });
