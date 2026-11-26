@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { App, Notice, TFile } from "obsidian";
 import { QuestionStudyService } from "../services/QuestionStudyService";
 import { Question } from "../types";
@@ -10,22 +11,22 @@ export async function renderQuestionStudy(
   question: Question,
   service: QuestionStudyService,
 ): Promise<(() => Promise<boolean>) | undefined> {
-  const loading = root.createEl("p", { text: "メモと関連知識ノートを読み込んでいます…" });
+  const loading = root.createEl("p", { text: t("メモと関連知識ノートを読み込んでいます…") });
   try {
     const initial = await service.load(question);
     loading.remove();
     const flushMemo = renderQuestionMemo(root, question, service, initial.memo);
 
     const heading = root.createDiv({ cls: "kokushi-study-heading" });
-    heading.createEl("h4", { text: "ノート" });
+    heading.createEl("h4", { text: t("ノート") });
     const headingActions = heading.createDiv({ cls: "kokushi-study-heading-actions" });
-    const create = headingActions.createEl("button", { type: "button", text: "新規" });
-    const edit = headingActions.createEl("button", { type: "button", text: "編集" });
+    const create = headingActions.createEl("button", { type: "button", text: t("新規") });
+    const edit = headingActions.createEl("button", { type: "button", text: t("編集") });
     const links = root.createDiv();
     const actions = root.createDiv({ cls: "kokushi-study-actions" });
-    const existing = actions.createEl("button", { type: "button", text: "既存ノートを関連付け", cls: "mod-cta" });
-    const remove = actions.createEl("button", { type: "button", text: "選択した関連付けを外す" });
-    const cancel = actions.createEl("button", { type: "button", text: "キャンセル" });
+    const existing = actions.createEl("button", { type: "button", text: t("既存ノートを関連付け"), cls: "mod-cta" });
+    const remove = actions.createEl("button", { type: "button", text: t("選択した関連付けを外す") });
+    const cancel = actions.createEl("button", { type: "button", text: t("キャンセル") });
 
     let relatedNotes = initial.relatedNotes;
     let editing = false;
@@ -34,7 +35,7 @@ export async function renderQuestionStudy(
     const openNote = (file: TFile): void => {
       void service.openNote(file).catch(error => {
         console.error("[Kokushi] Related note open error", error);
-        new Notice("ノートを開けませんでした。");
+        new Notice(t("ノートを開けませんでした。"));
       });
     };
 
@@ -49,7 +50,7 @@ export async function renderQuestionStudy(
       }
       remove.disabled = selected.size === 0;
       if (relatedNotes.length === 0) {
-        links.createEl("p", { text: "関連づけられているノートはありません" });
+        links.createEl("p", { text: t("関連づけられているノートはありません") });
         return;
       }
 
@@ -57,7 +58,7 @@ export async function renderQuestionStudy(
       for (const path of relatedNotes) {
         const item = list.createEl("li");
         const note = service.getNote(path);
-        const name = note?.basename ?? `${path}（見つかりません）`;
+        const name = note?.basename ?? t("{0}（見つかりません）", path);
         if (editing) {
           const label = item.createEl("label", { cls: "kokushi-study-check" });
           const check = label.createEl("input", { type: "checkbox" });
@@ -105,13 +106,13 @@ export async function renderQuestionStudy(
     existing.onclick = () => {
       const notes = service.getNotes().filter(note => !relatedNotes.includes(note.path));
       if (notes.length === 0) {
-        new Notice("関連付けられるノートがありません。");
+        new Notice(t("関連付けられるノートがありません。"));
         return;
       }
       new StudyNotePicker(app, notes, file => {
         void attach(file).catch(error => {
           console.error("[Kokushi] Related note link error", error);
-          new Notice("ノートの関連付けを保存できませんでした。");
+          new Notice(t("ノートの関連付けを保存できませんでした。"));
         });
       }).open();
     };
@@ -134,7 +135,7 @@ export async function renderQuestionStudy(
         stopEditing();
       } catch (error) {
         console.error("[Kokushi] Related note unlink error", error);
-        new Notice("ノートの関連付けを外せませんでした。");
+        new Notice(t("ノートの関連付けを外せませんでした。"));
         remove.disabled = selected.size === 0;
       } finally {
         cancel.disabled = existing.disabled = false;
@@ -145,7 +146,7 @@ export async function renderQuestionStudy(
   } catch (error) {
     console.error("[Kokushi] Question study load error", error);
     loading.addClass("kokushi-study-error");
-    loading.setText("メモと関連知識ノートを読み込めませんでした。");
+    loading.setText(t("メモと関連知識ノートを読み込めませんでした。"));
     return undefined;
   }
 }

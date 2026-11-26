@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { bindAppearance, unbindAppearance } from "./KokushiAppearance";
 import { App, Modal, Notice } from "obsidian";
 import { resolveQuestionAsset } from "../services/QuestionAssets";
@@ -10,7 +11,7 @@ export function bindImagePreview(app: App, root: HTMLElement, questionPath: stri
       image.classList.add("kokushi-previewable-image");
       image.tabIndex = 0;
       image.setAttribute("role", "button");
-      image.setAttribute("aria-label", image.alt ? `${image.alt}を拡大表示` : "画像を拡大表示");
+      image.setAttribute("aria-label", image.alt ? t("{0}を拡大表示", image.alt) : t("画像を拡大表示"));
     }
   };
   const open = (event: MouseEvent | KeyboardEvent): void => {
@@ -39,7 +40,7 @@ class ImagePreviewModal extends Modal {
   }
 
   onOpen(): void {
-    this.setTitle(this.original.alt || "問題画像");
+    this.setTitle(this.original.alt || t("問題画像"));
     bindAppearance(this.app, this.modalEl);
     const root = this.contentEl;
     root.addClass("kokushi-image-preview");
@@ -47,8 +48,8 @@ class ImagePreviewModal extends Modal {
       attr: { src: this.original.currentSrc || this.original.src, alt: this.original.alt },
     });
     const actions = root.createDiv({ cls: "kokushi-history-actions" });
-    const copy = actions.createEl("button", { type: "button", text: "画像をコピー", cls: "mod-cta" });
-    const close = actions.createEl("button", { type: "button", text: "閉じる" });
+    const copy = actions.createEl("button", { type: "button", text: t("画像をコピー"), cls: "mod-cta" });
+    const close = actions.createEl("button", { type: "button", text: t("閉じる") });
     close.onclick = () => this.close();
     copy.onclick = async () => {
       if (copy.disabled) return;
@@ -60,10 +61,10 @@ class ImagePreviewModal extends Modal {
           const file = resolveQuestionAsset(this.app, embed, this.questionPath);
           return file ? this.app.vault.readBinary(file) : null;
         });
-        new Notice("画像をコピーしました。");
+        new Notice(t("画像をコピーしました。"));
       } catch (error) {
         console.error("[Kokushi] Image copy error", error);
-        new Notice("画像をコピーできませんでした。画像の読み込みと端末の対応状況を確認してください。");
+        new Notice(t("画像をコピーできませんでした。画像の読み込みと端末の対応状況を確認してください。"));
       } finally {
         copy.disabled = false;
       }
@@ -78,7 +79,7 @@ class ImagePreviewModal extends Modal {
 
 async function copyImage(image: HTMLImageElement, readVaultImage: () => Promise<ArrayBuffer> | null): Promise<void> {
   const view = image.ownerDocument.defaultView ?? window;
-  if (!view.navigator.clipboard?.write || !view.ClipboardItem) throw new Error("画像のコピーに対応していません");
+  if (!view.navigator.clipboard?.write || !view.ClipboardItem) throw new Error(t("画像のコピーに対応していません"));
   // 書き込みはクリックの処理中に開始し、画像の変換結果は ClipboardItem に渡す。
   const blob = imagePng(image).catch(async (error: unknown) => {
     const data = await readVaultImage();
@@ -106,10 +107,10 @@ async function imagePng(image: HTMLImageElement): Promise<Blob> {
   canvas.width = image.naturalWidth;
   canvas.height = image.naturalHeight;
   const context = canvas.getContext("2d");
-  if (!context || !canvas.width || !canvas.height) throw new Error("画像を読み込めません");
+  if (!context || !canvas.width || !canvas.height) throw new Error(t("画像を読み込めません"));
   context.drawImage(image, 0, 0);
   return new Promise((resolve, reject) => canvas.toBlob(blob => {
     if (blob) resolve(blob);
-    else reject(new Error("PNGに変換できません"));
+    else reject(new Error(t("PNGに変換できません")));
   }, "image/png"));
 }

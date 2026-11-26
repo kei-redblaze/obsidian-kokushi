@@ -1068,3 +1068,38 @@ If your plugin does not need CSS, delete this file.
 .kokushi-custom-accent button.mod-cta:hover:not(:disabled) {
   background-color: color-mix(in srgb, var(--kokushi-accent) 94%, var(--kokushi-accent-text));
 }
+
+.kokushi-scope-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.kokushi-scope-inline > h3 {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.kokushi-scope-inline > .kokushi-scope-buttons {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow-x: auto;
+  margin: 0;
+  padding: 3px;
+}
+
+.kokushi-scope-inline .kokushi-scope-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.kokushi-drafts ul {
+  list-style: none;
+  padding-inline-start: 0;
+}
+
+.kokushi-color-picker[hidden] {
+  display: none;
+}

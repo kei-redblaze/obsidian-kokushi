@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { Notice } from "obsidian";
 
 const IMAGE = "img, picture, .image-embed";
@@ -64,7 +65,7 @@ function groupImages(parent: HTMLElement): void {
     const inline = parent.matches("p, span, a");
     const gallery = existing ?? parent.createEl(inline ? "span" : "div", {
       cls: inline ? "kokushi-image-gallery kokushi-image-gallery-inline" : "kokushi-image-gallery",
-      attr: { tabindex: "0", role: "region", "aria-label": "問題文の画像" },
+      attr: { tabindex: "0", role: "region", "aria-label": t("問題文の画像") },
     });
 
     const first = group[0];
@@ -126,7 +127,7 @@ export async function copyQuestionText(document: Document, text: string): Promis
     const clipboard = document.defaultView?.navigator.clipboard;
     if (!clipboard) throw new Error("Clipboard API unavailable");
     await clipboard.writeText(text);
-    new Notice("問題をコピーしました。");
+    new Notice(t("問題をコピーしました。"));
   } catch (error) {
     const textarea = document.createElement("textarea");
     textarea.className = "kokushi-copy-target";
@@ -139,7 +140,7 @@ export async function copyQuestionText(document: Document, text: string): Promis
       textarea.setSelectionRange(0, text.length);
       // Clipboard API が使えない環境でのみ使用する。
       if (document.execCommand("copy")) {
-        new Notice("問題をコピーしました。");
+        new Notice(t("問題をコピーしました。"));
         return;
       }
     } catch (fallbackError) {
@@ -149,6 +150,6 @@ export async function copyQuestionText(document: Document, text: string): Promis
       if (focus?.instanceOf(HTMLElement)) focus.focus({ preventScroll: true });
     }
     console.error("[Kokushi] Question copy error", error);
-    new Notice("問題をコピーできませんでした。");
+    new Notice(t("問題をコピーできませんでした。"));
   }
 }

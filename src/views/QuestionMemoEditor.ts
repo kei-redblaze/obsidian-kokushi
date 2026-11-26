@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { QuestionStudyService } from "../services/QuestionStudyService";
 import { Question } from "../types";
 
@@ -11,7 +12,7 @@ export function renderQuestionMemo(
 ): () => Promise<boolean> {
   const input = root.createEl("textarea", {
     cls: "kokushi-study-memo",
-    attr: { rows: "3", "aria-label": "メモ", placeholder: "ここにメモを入力" },
+    attr: { rows: "3", "aria-label": t("メモ"), placeholder: t("ここにメモを入力") },
   });
   input.value = initial;
   const status = root.createDiv({
@@ -43,7 +44,7 @@ export function renderQuestionMemo(
         }).catch(error => {
           console.error("[Kokushi] Memo save error", error);
           const dirty = input.value !== saved;
-          status.setText(dirty ? "メモを保存できませんでした。" : "");
+          status.setText(dirty ? t("メモを保存できませんでした。") : "");
           return !dirty;
         }).finally(() => { pending = null; });
       }

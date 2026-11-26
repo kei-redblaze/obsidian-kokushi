@@ -1,13 +1,17 @@
+import { t } from "../i18n";
 import { questionKey } from "./QuestionIdentity";
 import { Attempt, GradeResult, PracticeTarget } from "../types";
 
-export const PRACTICE_TARGET_LABELS: Record<PracticeTarget, string> = {
+const RATING_SYMBOLS = {
   excellent: "◎",
   good: "◯",
   review: "△",
   wrong: "×",
-  unanswered: "未解答",
-};
+} as const;
+
+export function ratingLabel(target: PracticeTarget): string {
+  return target === "unanswered" ? t("未解答") : RATING_SYMBOLS[target];
+}
 
 export const ALL_PRACTICE_TARGETS: readonly PracticeTarget[] = ["excellent", "good", "review", "wrong", "unanswered"];
 export const DEFAULT_PRACTICE_TARGETS: readonly PracticeTarget[] = ["good", "review", "wrong", "unanswered"];

@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 
 import {
   App,
@@ -31,7 +32,7 @@ export class AttemptService {
 
         if (existing !== null) {
           throw new Error(
-            "履歴保存先がファイルではありません"
+            t("履歴保存先がファイルではありません")
           );
         }
 
@@ -56,7 +57,7 @@ export class AttemptService {
         await this.app.vault.create(PATHS.attempts, lines);
         return attempts;
       }
-      if (!(file instanceof TFile)) throw new Error("履歴保存先がファイルではありません");
+      if (!(file instanceof TFile)) throw new Error(t("履歴保存先がファイルではありません"));
       let saved = attempts;
       const sessionId = attempts[0]?.sessionId;
       const keys = new Set(attempts.map(questionKey));
@@ -74,7 +75,7 @@ export class AttemptService {
           }
         }
         if (!existing.size) return content + (content && !content.endsWith("\n") ? "\n" : "") + lines;
-        if (existing.size !== attempts.length) throw new Error("連問の解答履歴が一部だけ保存されています");
+        if (existing.size !== attempts.length) throw new Error(t("連問の解答履歴が一部だけ保存されています"));
         saved = attempts.map(attempt => existing.get(questionKey(attempt)) ?? attempt);
         return content;
       });
@@ -87,7 +88,7 @@ export class AttemptService {
   async updateRating(sessionId: string, question: QuestionReference, rating: PracticeTarget): Promise<void> {
     const task = this.queue.then(async () => {
       const file = this.app.vault.getAbstractFileByPath(PATHS.attempts);
-      if (!(file instanceof TFile)) throw new Error("解答履歴が見つかりません");
+      if (!(file instanceof TFile)) throw new Error(t("解答履歴が見つかりません"));
       const key = questionKey(question);
       await this.app.vault.process(file, text => {
         const lines = text.split(/(\r?\n)/);
@@ -104,7 +105,7 @@ export class AttemptService {
           lines[i] = JSON.stringify({ ...value, rating });
           return lines.join("");
         }
-        throw new Error("この演習の解答が見つかりません");
+        throw new Error(t("この演習の解答が見つかりません"));
       });
     });
     this.queue = task.catch(() => {});
@@ -121,7 +122,7 @@ export class AttemptService {
     const task = this.queue.then(async () => {
       const file = this.app.vault.getAbstractFileByPath(PATHS.attempts);
       if (file === null) return;
-      if (!(file instanceof TFile)) throw new Error("解答履歴の保存先がファイルではありません");
+      if (!(file instanceof TFile)) throw new Error(t("解答履歴の保存先がファイルではありません"));
 
       await this.app.vault.process(file, text => text.replace(/[^\n]+(?:\n|$)/g, line => {
         try {

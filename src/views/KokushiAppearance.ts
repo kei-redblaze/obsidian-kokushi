@@ -1,19 +1,33 @@
 import type { App } from "obsidian";
+import { LanguagePreference } from "../i18n";
 
 export interface KokushiPreferences {
   customAccent: boolean;
   accent: string;
+  presetCount: number;
+  language: LanguagePreference;
 }
 
+const DEFAULT_PRESET_COUNT = 10;
 const DEFAULT_ACCENT = "#7959d4";
 const appearances = new WeakMap<App, KokushiAppearance>();
 
 export function readPreferences(value: unknown): KokushiPreferences {
   const data = value as Partial<KokushiPreferences> | null;
   return {
+    presetCount: isValidPresetCount(data?.presetCount) ? data.presetCount : DEFAULT_PRESET_COUNT,
+    language: data?.language === "ja" || data?.language === "en" ? data.language : "system",
     customAccent: data?.customAccent === true,
     accent: typeof data?.accent === "string" && /^#[0-9a-f]{6}$/i.test(data.accent) ? data.accent : DEFAULT_ACCENT,
   };
+}
+
+export function isValidPresetCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+export function getPresetCount(app: App): number {
+  return appearances.get(app)?.presetCount ?? DEFAULT_PRESET_COUNT;
 }
 
 export function installAppearance(app: App, preferences: KokushiPreferences): KokushiAppearance {
@@ -34,6 +48,10 @@ class KokushiAppearance {
   private roots = new Set<HTMLElement>();
 
   constructor(private preferences: KokushiPreferences) {}
+
+  get presetCount(): number {
+    return this.preferences.presetCount;
+  }
 
   attach(root: HTMLElement): void {
     this.roots.add(root);

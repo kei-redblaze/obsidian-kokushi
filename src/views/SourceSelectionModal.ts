@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { bindAppearance, unbindAppearance } from "./KokushiAppearance";
 import { App, Modal } from "obsidian";
 
@@ -12,17 +13,17 @@ export class SourceSelectionModal extends Modal {
   }
 
   onOpen(): void {
-    this.setTitle("出典を選択");
+    this.setTitle(t("出典を選択"));
     bindAppearance(this.app, this.modalEl);
     const selected = new Set(this.initial ?? this.sources);
     const root = this.contentEl;
     root.addClass("kokushi-source-modal");
     const actions = root.createDiv({ cls: "kokushi-source-modal-tools" });
-    const all = actions.createEl("button", { type: "button", text: "全選択" });
-    const clear = actions.createEl("button", { type: "button", text: "全解除" });
+    const all = actions.createEl("button", { type: "button", text: t("全選択") });
+    const clear = actions.createEl("button", { type: "button", text: t("全解除") });
     const list = root.createDiv({
       cls: "kokushi-source-modal-list",
-      attr: { role: "group", "aria-label": "出典一覧" },
+      attr: { role: "group", "aria-label": t("出典一覧") },
     });
     const inputs = new Map<string, HTMLInputElement>();
     for (const source of this.sources) {
@@ -48,8 +49,8 @@ export class SourceSelectionModal extends Modal {
     clear.onclick = () => selectAll(false);
 
     const footer = root.createDiv({ cls: "kokushi-source-modal-footer" });
-    const cancel = footer.createEl("button", { type: "button", text: "キャンセル" });
-    const apply = footer.createEl("button", { type: "button", cls: "mod-cta", text: "適用" });
+    const cancel = footer.createEl("button", { type: "button", text: t("キャンセル") });
+    const apply = footer.createEl("button", { type: "button", cls: "mod-cta", text: t("適用") });
     cancel.onclick = () => this.close();
     apply.onclick = () => {
       this.apply(selected.size === this.sources.length ? null : this.sources.filter(source => selected.has(source)));

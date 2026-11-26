@@ -1,4 +1,5 @@
-import { bindAppearance, unbindAppearance } from "./KokushiAppearance";
+import { locale, t } from "../i18n";
+import { bindAppearance, getPresetCount, unbindAppearance } from "./KokushiAppearance";
 
 import {
   ItemView,
@@ -21,7 +22,7 @@ import { fitQuestionUnits, questionUnits } from "../services/QuestionSequences";
 import { QuestionService } from "../services/QuestionService";
 import { QuestionStudyService } from "../services/QuestionStudyService";
 import {
-  ALL_PRACTICE_TARGETS, DEFAULT_PRACTICE_TARGETS, PRACTICE_TARGET_LABELS, attemptGrade, attemptRating, defaultRating, latestAttemptRatings,
+  ALL_PRACTICE_TARGETS, DEFAULT_PRACTICE_TARGETS, ratingLabel, attemptGrade, attemptRating, defaultRating, latestAttemptRatings,
 } from "../services/PracticeTargets";
 import { GradingService } from "../services/GradingService";
 import { AttemptService } from "../services/AttemptService";
@@ -30,7 +31,7 @@ import { questionKey } from "../services/QuestionIdentity";
 import { bindImagePreview } from "./ImagePreviewModal";
 import { openQuestionEditor } from "./QuestionEditor";
 import { SourceSelectionModal } from "./SourceSelectionModal";
-import { GRADE_LABELS } from "./sessionFormatting";
+import { gradeLabel } from "./sessionFormatting";
 import { renderDraftList } from "./DraftList";
 import { DiscardSessionModal } from "./DiscardSessionModal";
 import { renderQuestionStudy } from "./QuestionStudyPanel";
@@ -44,8 +45,7 @@ export const VIEW_TYPE_KOKUSHI = "kokushi-quiz";
 
 type OrderMode = "sequential" | "random";
 
-type CountMode = "all" | "five" | "ten" | "twenty" | "custom";
-const FIXED_COUNTS = { five: 5, ten: 10, twenty: 20 } as const;
+type CountMode = "all" | "preset" | "custom";
 
 type QuizScope = {
   sources: string[] | null;
@@ -138,7 +138,7 @@ export class QuizView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "演習";
+    return t("演習");
   }
 
   getIcon(): string {
@@ -158,7 +158,7 @@ export class QuizView extends ItemView {
     this.stopWatchingImages = null;
     await this.pendingOperation?.catch(() => {});
     if (!await this.flushMemo() && !await this.flushMemo()) {
-      new Notice("メモを保存できませんでした。");
+      new Notice(t("メモを保存できませんでした。"));
     }
     this.memoEditor = null;
     if (!await this.flushDraft() && this.draftDirty) await this.flushDraft();
@@ -193,7 +193,7 @@ export class QuizView extends ItemView {
     this.resetScroll();
 
     this.contentEl.createEl("p", {
-      text: "問題を読み込んでいます...",
+      text: t("問題を読み込んでいます..."),
     });
 
     try {
@@ -214,11 +214,11 @@ export class QuizView extends ItemView {
       this.contentEl.empty();
 
       this.contentEl.createEl("p", {
-        text: "問題の読み込みに失敗しました。",
+        text: t("問題の読み込みに失敗しました。"),
       });
 
       new Notice(
-        "問題の読み込みに失敗しました"
+        t("問題の読み込みに失敗しました")
       );
     }
   }
@@ -239,8 +239,8 @@ export class QuizView extends ItemView {
     root.addClass("kokushi-quiz");
     root.addClass("kokushi-scope");
     const heading = root.createDiv({ cls: "kokushi-section-heading" });
-    heading.createEl("h2", { text: "出題範囲を選択" });
-    const refresh = heading.createEl("button", { type: "button", text: "更新" });
+    heading.createEl("h2", { text: t("出題範囲を選択") });
+    const refresh = heading.createEl("button", { type: "button", text: t("更新") });
     refresh.onclick = async () => {
       if (refresh.disabled) return;
       refresh.disabled = true;
@@ -251,25 +251,25 @@ export class QuizView extends ItemView {
         await this.renderScopeSelection();
       } catch (error) {
         console.error("[Kokushi] Scope refresh error", error);
-        new Notice("出題範囲を更新できませんでした。");
+        new Notice(t("出題範囲を更新できませんでした。"));
       } finally {
         refresh.disabled = false;
       }
     };
-    renderDraftList(root.createDiv(), this.app, this.sessionService, {
+    renderDraftList(root.createDiv({ cls: "kokushi-scope-group kokushi-drafts" }), this.app, this.sessionService, {
       resume: id => this.resumeDraft(id),
       retry: (record, mode) => this.startFromHistory(record, mode),
     });
 
-    const loading = root.createEl("p", { text: "解答履歴を読み込んでいます..." });
+    const loading = root.createEl("p", { text: t("解答履歴を読み込んでいます...") });
     let ratings: Map<string, PracticeTarget>;
 
     try {
       ratings = latestAttemptRatings(await this.attemptService.getAttempts());
     } catch (error) {
       console.error("[Kokushi] History load error", error);
-      loading.setText("解答履歴を読み込めませんでした。");
-      new Notice("解答履歴の読み込みに失敗しました");
+      loading.setText(t("解答履歴を読み込めませんでした。"));
+      new Notice(t("解答履歴の読み込みに失敗しました"));
       return;
     }
 
@@ -303,6 +303,7 @@ export class QuizView extends ItemView {
     // 指定問題数
     // ========================================
 
+    const presetCount = getPresetCount(this.app);
     const getRequestedCount = (
       available: number
     ): number | null => {
@@ -311,7 +312,7 @@ export class QuizView extends ItemView {
       }
 
       if (this.quizScope.countMode !== "custom") {
-        return FIXED_COUNTS[this.quizScope.countMode];
+        return presetCount;
       }
 
       const value =
@@ -332,18 +333,12 @@ export class QuizView extends ItemView {
     // UI共通処理
     // ========================================
 
-    const createGroup = (
-      title: string
-    ): HTMLElement => {
-      const group = root.createDiv({
-        cls: "kokushi-scope-group",
-      });
-
-      group.createEl("h3", {
-        text: title,
-      });
-
-      return group;
+    const createGroup = (title: string): { group: HTMLElement; row: HTMLElement } => {
+      const group = root.createDiv({ cls: "kokushi-scope-group" });
+      const heading = group.createDiv({ cls: "kokushi-scope-inline" });
+      heading.createEl("h3", { text: title });
+      const row = heading.createDiv({ cls: "kokushi-scope-buttons", attr: { role: "group", "aria-label": title } });
+      return { group, row };
     };
 
     // ----------------------------------------
@@ -362,7 +357,7 @@ export class QuizView extends ItemView {
 
     const startButton =
       root.createEl("button", {
-        text: "演習開始",
+        text: t("演習開始"),
         cls: "mod-cta kokushi-start-button",
       });
 
@@ -388,11 +383,11 @@ export class QuizView extends ItemView {
 
       if (requested === null) {
         countEl.setText(
-          `条件一致：${available}問`
+          t("条件一致：{0}問", available)
         );
 
         errorEl.setText(
-          "1以上の整数を入力してください。"
+          t("1以上の整数を入力してください。")
         );
 
         startButton.disabled = true;
@@ -404,15 +399,15 @@ export class QuizView extends ItemView {
         : Math.min(requested, available);
 
       countEl.setText(
-        `条件一致：${available}問 / 出題：${actual}問`
+        t("条件一致：{0}問 / 出題：{1}問", available, actual)
       );
 
       const includesSequences = units.some(unit => unit.length > 1);
       if (includesSequences && requested < available) {
-        errorEl.setText("残りの出題枠に収まらない連問は見送ります。");
-        if (this.quizScope.order === "random") countEl.setText(`条件一致：${available}問 / 出題：最大${actual}問`);
+        errorEl.setText(t("残りの出題枠に収まらない連問は見送ります。"));
+        if (this.quizScope.order === "random") countEl.setText(t("条件一致：{0}問 / 出題：最大{1}問", available, actual));
       } else if (requested > available && available > 0) {
-        errorEl.setText("指定問題数に満たないため、対象全問を出題します。");
+        errorEl.setText(t("指定問題数に満たないため、対象全問を出題します。"));
       }
 
       startButton.disabled = actual === 0 || !units.some(unit => unit.length <= requested);
@@ -423,7 +418,7 @@ export class QuizView extends ItemView {
     // ----------------------------------------
 
     const createButtons = (
-      parent: HTMLElement,
+      row: HTMLElement,
       options: Array<{
         value: string;
         label: string;
@@ -431,10 +426,6 @@ export class QuizView extends ItemView {
       getValue: () => string,
       setValue: (value: string) => void
     ): void => {
-      const row = parent.createDiv({
-        cls: "kokushi-scope-buttons",
-      });
-
       const buttons: Array<{
         value: string;
         button: HTMLButtonElement;
@@ -488,7 +479,7 @@ export class QuizView extends ItemView {
 
     const sourceGroup = root.createDiv({ cls: "kokushi-scope-group" });
     const sourceHeading = sourceGroup.createDiv({ cls: "kokushi-section-heading" });
-    sourceHeading.createEl("h3", { text: "出典" });
+    sourceHeading.createEl("h3", { text: t("出典") });
     const sourceActions = sourceHeading.createDiv({
       cls: "kokushi-scope-actions",
     });
@@ -499,9 +490,9 @@ export class QuizView extends ItemView {
         const selected = this.quizScope.sources;
         summary.empty();
         if (selected === null || selected.length === sources.length) {
-          summary.createEl("p", { text: `すべての出典（${sources.length}件）` });
+          summary.createEl("p", { text: t("すべての出典（{0}件）", sources.length) });
         } else if (!selected.length) {
-          summary.createEl("p", { text: "出典が選択されていません" });
+          summary.createEl("p", { text: t("出典が選択されていません") });
         } else {
           const list = summary.createEl("ul");
           for (const source of sources) {
@@ -509,7 +500,7 @@ export class QuizView extends ItemView {
           }
         }
       };
-      const choose = sourceActions.createEl("button", { type: "button", text: "選択" });
+      const choose = sourceActions.createEl("button", { type: "button", text: t("選択") });
       choose.onclick = () => new SourceSelectionModal(this.app, sources, this.quizScope.sources, selected => {
         if (!root.contains(heading) || refresh.disabled) return;
         this.quizScope.sources = selected;
@@ -518,8 +509,8 @@ export class QuizView extends ItemView {
       }).open();
       sync();
     } else {
-      const all = sourceActions.createEl("button", { type: "button", text: "全選択" });
-      const clear = sourceActions.createEl("button", { type: "button", text: "全解除" });
+      const all = sourceActions.createEl("button", { type: "button", text: t("全選択") });
+      const clear = sourceActions.createEl("button", { type: "button", text: t("全解除") });
       const sourceRow = sourceGroup.createDiv({ cls: "kokushi-scope-buttons" });
       const buttons = new Map<string, HTMLButtonElement>();
       const apply = (selected: string[] | null): void => {
@@ -551,15 +542,15 @@ export class QuizView extends ItemView {
     // ========================================
 
     createButtons(
-      createGroup("順序"),
+      createGroup(t("順序")).row,
       [
         {
           value: "sequential",
-          label: "問題番号順",
+          label: t("問題番号順"),
         },
         {
           value: "random",
-          label: "ランダム",
+          label: t("ランダム"),
         },
       ],
       () => this.quizScope.order,
@@ -575,11 +566,11 @@ export class QuizView extends ItemView {
     // 出題対象
     // ========================================
 
-    const targetGroup = createGroup("結果").createDiv({ cls: "kokushi-scope-buttons" });
+    const targetGroup = createGroup(t("評価")).row;
     for (const target of ALL_PRACTICE_TARGETS) {
       const button = targetGroup.createEl("button", {
         type: "button",
-        text: PRACTICE_TARGET_LABELS[target],
+        text: ratingLabel(target),
         cls: "kokushi-scope-button",
       });
       const sync = (): void => {
@@ -602,29 +593,26 @@ export class QuizView extends ItemView {
     // 出題問題数
     // ========================================
 
-    const countGroup =
-      createGroup("出題数");
+    const countGroup = createGroup(t("出題数"));
 
     createButtons(
-      countGroup,
+      countGroup.row,
       [
         {
           value: "all",
-          label: "すべて",
+          label: t("すべて"),
         },
-        { value: "five", label: "5問" },
-        { value: "ten", label: "10問" },
-        { value: "twenty", label: "20問" },
+        { value: "preset", label: t("{0}問", presetCount) },
         {
           value: "custom",
-          label: "任意",
+          label: t("任意"),
         },
       ],
       () => this.quizScope.countMode,
       value => {
         if (
           value === "all" ||
-          value === "five" || value === "ten" || value === "twenty" ||
+          value === "preset" ||
           value === "custom"
         ) {
           this.quizScope.countMode = value;
@@ -632,14 +620,14 @@ export class QuizView extends ItemView {
       }
     );
 
-    customRow = countGroup.createDiv({
+    customRow = countGroup.group.createDiv({
       cls: "kokushi-custom-count",
     });
 
     const customInput =
       customRow.createEl("input", {
         type: "number",
-        placeholder: "例：25",
+        placeholder: t("例：25"),
       });
 
     customInput.min = "1";
@@ -649,7 +637,7 @@ export class QuizView extends ItemView {
     customInput.value =
       this.quizScope.customCount;
 
-    customRow.createSpan().setText("問");
+    if (locale() === "ja") customRow.createSpan().setText("問");
 
     customInput.addEventListener("input", () => {
       this.quizScope.customCount =
@@ -663,13 +651,13 @@ export class QuizView extends ItemView {
     root.appendChild(startButton);
     const dashboard = root.createEl("button", {
       type: "button",
-      text: "ダッシュボードを見る",
+      text: t("ダッシュボードを見る"),
       cls: "kokushi-scope-dashboard",
     });
     dashboard.onclick = () => {
       void this.openDashboard().catch(error => {
         console.error("[Kokushi] Open dashboard error", error);
-        new Notice("ダッシュボードを開けませんでした。");
+        new Notice(t("ダッシュボードを開けませんでした。"));
       });
     };
 
@@ -810,7 +798,7 @@ export class QuizView extends ItemView {
           this.draftDirty = true;
           if (!this.draftErrorShown) {
             this.draftErrorShown = true;
-            new Notice("中断データを保存できませんでした。");
+            new Notice(t("中断データを保存できませんでした。"));
           }
         }
         return false;
@@ -839,7 +827,7 @@ export class QuizView extends ItemView {
     if (!await this.leaveSession()) return false;
 
     if (!this.sessionService.claimDraft(id, this.leaf)) {
-      new Notice("この演習は別のペインで開いています。");
+      new Notice(t("この演習は別のペインで開いています。"));
       return false;
     }
 
@@ -852,7 +840,7 @@ export class QuizView extends ItemView {
         ? record.currentIndex
         : record?.questions.findIndex(question => question.grade === null);
       if (!record || resumeIndex === undefined || resumeIndex < 0) {
-        new Notice("再開できる演習が見つかりませんでした。");
+        new Notice(t("再開できる演習が見つかりませんでした。"));
         return false;
       }
 
@@ -864,7 +852,7 @@ export class QuizView extends ItemView {
       for (const item of record.questions) {
         const question = available.get(questionKey(item));
         if (!question) {
-          new Notice(`${item.source}の問題 ${item.id} が見つからないため、演習を再開できません。`);
+          new Notice(t("{0}の問題 {1} が見つからないため、演習を再開できません。", item.source, item.id));
           return false;
         }
         questions.push(question);
@@ -877,7 +865,7 @@ export class QuizView extends ItemView {
           return item?.id !== id || item.path !== question.path;
         });
       })) {
-        new Notice("連問の構成が変更されたため、この演習を再開できません。");
+        new Notice(t("連問の構成が変更されたため、この演習を再開できません。"));
         return false;
       }
 
@@ -917,7 +905,7 @@ export class QuizView extends ItemView {
       return true;
     } catch (error) {
       console.error("[Kokushi] Draft resume error", error);
-      new Notice("演習を再開できませんでした。");
+      new Notice(t("演習を再開できませんでした。"));
       return false;
     } finally {
       this.pendingOperation = null;
@@ -1027,7 +1015,7 @@ export class QuizView extends ItemView {
     } catch (error) {
       console.error("[Kokushi] Session save error", error);
       if (this.draftDirty && !this.closing) this.scheduleDraftSave();
-      new Notice("演習履歴を保存できませんでした。もう一度お試しください。");
+      new Notice(t("演習履歴を保存できませんでした。もう一度お試しください。"));
       return;
     } finally {
       this.pendingOperation = null;
@@ -1117,14 +1105,14 @@ export class QuizView extends ItemView {
     const progress = header.createEl("p", { cls: "kokushi-question-progress" });
     progress.createEl("strong", { text: question.id });
     progress.createSpan({ text: ` (${this.index + 1} / ${this.questions.length})` });
-    if (question.sequence) progress.createSpan({ text: ` 連問 ${question.sequence.index + 1} / ${question.sequence.ids.length}` });
+    if (question.sequence) progress.createSpan({ text: t(" 連問 {0} / {1}", question.sequence.index + 1, question.sequence.ids.length) });
 
     const headerActions = header.createDiv({ cls: "kokushi-header-actions" });
     if (this.graded !== null) {
-      const edit = headerActions.createEl("button", { type: "button", text: "編集" });
+      const edit = headerActions.createEl("button", { type: "button", text: t("編集") });
       edit.onclick = () => { void openQuestionEditor(this.app, question.path); };
     }
-    const copyButton = headerActions.createEl("button", { type: "button", text: "コピー" });
+    const copyButton = headerActions.createEl("button", { type: "button", text: t("コピー") });
     copyButton.disabled = true;
 
     // ========================================
@@ -1141,7 +1129,7 @@ export class QuizView extends ItemView {
       wrapper.addClass("kokushi-question-table");
       wrapper.tabIndex = 0;
       wrapper.setAttribute("role", "region");
-      wrapper.setAttribute("aria-label", "問題文の表");
+      wrapper.setAttribute("aria-label", t("問題文の表"));
       if (wrapper !== parent) {
         table.before(wrapper);
         wrapper.appendChild(table);
@@ -1187,8 +1175,8 @@ export class QuizView extends ItemView {
     const unknownButton =
       container.createEl("button", {
         text: this.unknown
-          ? "わからない ✓"
-          : "わからない",
+          ? t("わからない ✓")
+          : t("わからない"),
         cls: "kokushi-unknown-button",
       });
 
@@ -1237,8 +1225,8 @@ export class QuizView extends ItemView {
         "button",
         {
           text: question.sequence
-            ? question.sequence.index + 1 === question.sequence.ids.length ? "解答を確定して連問を採点" : "解答を確定して次へ"
-            : "解答・採点",
+            ? question.sequence.index + 1 === question.sequence.ids.length ? t("解答を確定して連問を採点") : t("解答を確定して次へ")
+            : t("解答・採点"),
           cls: "mod-cta kokushi-wide-action kokushi-submit",
         }
       );
@@ -1313,10 +1301,10 @@ export class QuizView extends ItemView {
   ): Promise<void> {
     const required = question.requiredChoices;
     const guide = question.excluded
-      ? "解答を選択してください（採点除外）。"
+      ? t("解答を選択してください（採点除外）。")
       : required === null
-        ? "該当するものをすべて選んでください。"
-        : `${required}つ選択してください。`;
+        ? t("該当するものをすべて選んでください。")
+        : t("{0}つ選択してください。", required);
 
     container.createEl("p", {
       text: guide,
@@ -1425,12 +1413,12 @@ export class QuizView extends ItemView {
     excluded: boolean,
   ): void {
     container.createEl("p", {
-      text: excluded ? "数値を入力してください（採点除外）。" : "数値を入力してください。",
+      text: excluded ? t("数値を入力してください（採点除外）。") : t("数値を入力してください。"),
     });
 
     const input = container.createEl("input", {
       type: "text",
-      placeholder: "数値",
+      placeholder: t("数値"),
       cls: "kokushi-numeric-input",
     });
 
@@ -1507,7 +1495,7 @@ export class QuizView extends ItemView {
         return !shown || updated.id !== shown.id || updated.stem !== shown.stem || updated.type !== shown.type ||
           updated.requiredChoices !== shown.requiredChoices || JSON.stringify(updated.options) !== JSON.stringify(shown.options);
       })) {
-        new Notice("連問の問題文や入力形式が変更されました。出題範囲に戻り、新しい演習を開始してください。");
+        new Notice(t("連問の問題文や入力形式が変更されました。出題範囲に戻り、新しい演習を開始してください。"));
         return;
       }
       this.draftDirty = true;
@@ -1515,7 +1503,7 @@ export class QuizView extends ItemView {
       const timestamp = new Date().toISOString();
       const attempts = latest.map((item, offset) => {
         const state = this.questionStates.get(first + offset);
-        if (!state || (offset < sequence.index && !state.confirmed)) throw new Error("確定済みの小問の解答が見つかりません");
+        if (!state || (offset < sequence.index && !state.confirmed)) throw new Error(t("確定済みの小問の解答が見つかりません"));
         const grade = item.excluded ? "excluded" : state.unknown ? "incorrect" : GradingService.grade(item, state.selected);
         return {
           id: item.id, source: item.source, sessionId: session.id, timestamp, selected: state.selected,
@@ -1539,7 +1527,7 @@ export class QuizView extends ItemView {
       if (!this.closing) await this.renderQuiz(false, true);
     } catch (error) {
       console.error("[Kokushi] Sequence grading error", error);
-      if (!this.closing) new Notice(error instanceof Error ? error.message : "連問を保存できませんでした。");
+      if (!this.closing) new Notice(error instanceof Error ? error.message : t("連問を保存できませんでした。"));
     } finally {
       this.pendingOperation = null;
       this.saving = false;
@@ -1563,7 +1551,7 @@ export class QuizView extends ItemView {
       latest = await this.questionService.reload(question);
     } catch (error) {
       this.saving = false;
-      const reason = error instanceof Error ? error.message : "問題を読み込めませんでした";
+      const reason = error instanceof Error ? error.message : t("問題を読み込めませんでした");
       if (!this.closing) new Notice(`${question.path} — ${reason}`, 10000);
       return;
     }
@@ -1574,7 +1562,7 @@ export class QuizView extends ItemView {
 
     if (latest.sequence) {
       this.saving = false;
-      new Notice("この問題は連問に変更されました。出題範囲に戻り、新しい演習を開始してください。");
+      new Notice(t("この問題は連問に変更されました。出題範囲に戻り、新しい演習を開始してください。"));
       return;
     }
 
@@ -1584,7 +1572,7 @@ export class QuizView extends ItemView {
       this.saving = false;
       this.resetAnswer();
       this.scheduleDraftSave(true);
-      new Notice("問題の表示内容または入力形式が更新されました。解答し直してください。");
+      new Notice(t("問題の表示内容または入力形式が更新されました。解答し直してください。"));
       await this.renderQuiz(false);
       return;
     }
@@ -1636,7 +1624,7 @@ export class QuizView extends ItemView {
       this.saving = false;
 
       new Notice(
-        "解答履歴を保存できませんでした。"
+        t("解答履歴を保存できませんでした。")
       );
 
       if (!this.closing) await this.renderQuiz(false);
@@ -1659,30 +1647,30 @@ export class QuizView extends ItemView {
 
     const summary = resultEl.createDiv({ cls: "kokushi-result-heading" });
     summary.createEl("h3", {
-      text: GRADE_LABELS[this.graded],
+      text: gradeLabel(this.graded),
       cls: `kokushi-result-grade is-${this.graded}`,
     });
     const excluded = this.graded === "excluded" || question.excluded;
     if (!excluded) {
       summary.createEl("p", {
-        text: `正答：${this.formatCorrectAnswer(question)}`,
+        text: t("正答：{0}", this.formatCorrectAnswer(question)),
         cls: "kokushi-result-answer",
       });
     }
 
     if (this.unknown) {
       resultEl.createEl("p", {
-        text: "「わからない」で解答しました。",
+        text: t("「わからない」で解答しました。"),
       });
     }
 
     if (excluded) {
-      resultEl.createEl("p", { text: "この問題は採点対象外です。" });
+      resultEl.createEl("p", { text: t("この問題は採点対象外です。") });
     }
 
     if (question.annotation) {
       const annotation = resultEl.createDiv({ cls: "kokushi-annotation" });
-      annotation.createEl("h4", { text: "注記" });
+      annotation.createEl("h4", { text: t("注記") });
       const content = annotation.createDiv();
       try {
         await MarkdownRenderer.render(this.app, question.annotation, content, question.path, this);
@@ -1701,12 +1689,12 @@ export class QuizView extends ItemView {
   private renderRating(root: HTMLElement, question: Question): void {
     const group = root.createDiv({
       cls: "kokushi-scope-buttons kokushi-rating",
-      attr: { role: "group", "aria-label": "本人の評価" },
+      attr: { role: "group", "aria-label": t("本人の評価") },
     });
     const buttons = new Map<PracticeTarget, HTMLButtonElement>();
     for (const rating of ALL_PRACTICE_TARGETS) {
       const button = group.createEl("button", {
-        type: "button", text: PRACTICE_TARGET_LABELS[rating], cls: "kokushi-scope-button",
+        type: "button", text: ratingLabel(rating), cls: "kokushi-scope-button",
       });
       buttons.set(rating, button);
       button.onclick = async () => {
@@ -1722,7 +1710,7 @@ export class QuizView extends ItemView {
           this.saveCurrentState();
         } catch (error) {
           console.error("[Kokushi] Rating save error", error);
-          if (!this.closing) new Notice("評価を保存できませんでした。");
+          if (!this.closing) new Notice(t("評価を保存できませんでした。"));
         } finally {
           this.pendingOperation = null;
           this.saving = false;
@@ -1756,7 +1744,7 @@ export class QuizView extends ItemView {
     const previousButton = nav.createEl(
       "button",
       {
-        text: "← 前の問題",
+        text: t("← 前の問題"),
       }
     );
 
@@ -1780,8 +1768,8 @@ export class QuizView extends ItemView {
       "button",
       {
         text: isLast
-          ? "演習終了"
-          : "次の問題 →",
+          ? t("演習終了")
+          : t("次の問題 →"),
 
         // 採点済みだけ紫色
         cls: this.graded !== null
@@ -1808,7 +1796,7 @@ export class QuizView extends ItemView {
 
     const scopeButton = container.createEl("button", {
       type: "button",
-      text: "出題範囲の選択に戻る",
+      text: t("出題範囲の選択に戻る"),
       cls: "kokushi-wide-action",
     });
     scopeButton.disabled = this.saving;
@@ -1816,7 +1804,7 @@ export class QuizView extends ItemView {
 
     const resultButton = container.createEl("button", {
       type: "button",
-      text: "演習を終了する",
+      text: t("演習を終了する"),
       cls: "kokushi-wide-action kokushi-view-results mod-warning",
     });
 
@@ -1878,7 +1866,7 @@ export class QuizView extends ItemView {
     question: Question
   ): string {
     if (question.excluded) {
-      return "採点除外";
+      return t("採点除外");
     }
 
     if (question.answer.length === 0) {
@@ -1891,7 +1879,7 @@ export class QuizView extends ItemView {
           ? set.join("")
           : set.join(", ")
       )
-      .join(" または ");
+      .join(t(" または "));
   }
 
   // ========================================
@@ -1907,8 +1895,8 @@ export class QuizView extends ItemView {
 
     if (state.unknown) {
       return state.graded === null
-        ? "わからない（未確定）"
-        : "わからない";
+        ? t("わからない（未確定）")
+        : t("わからない");
     }
 
     return state.selected.length > 0
@@ -1925,16 +1913,16 @@ export class QuizView extends ItemView {
   ): string {
     switch (state?.graded) {
       case "correct":
-        return "正解";
+        return t("正解");
 
       case "incorrect":
-        return "不正解";
+        return t("不正解");
 
       case "excluded":
-        return "採点除外";
+        return t("採点除外");
 
       default:
-        return "未採点";
+        return t("未採点");
     }
   }
 
@@ -1948,12 +1936,12 @@ export class QuizView extends ItemView {
     container.empty();
 
     const heading = container.createDiv({ cls: "kokushi-section-heading" });
-    heading.createEl("h2", { text: "演習結果" });
-    const dashboard = heading.createEl("button", { type: "button", text: "ダッシュボードを見る" });
+    heading.createEl("h2", { text: t("演習結果") });
+    const dashboard = heading.createEl("button", { type: "button", text: t("ダッシュボードを見る") });
     dashboard.onclick = () => {
       void this.openDashboard().catch(error => {
         console.error("[Kokushi] Open dashboard error", error);
-        new Notice("ダッシュボードを開けませんでした。");
+        new Notice(t("ダッシュボードを開けませんでした。"));
       });
     };
 
@@ -1965,12 +1953,12 @@ export class QuizView extends ItemView {
 
     if (total === 0) {
       container.createEl("p", {
-        text: "演習した問題がありません。",
+        text: t("演習した問題がありません。"),
       });
 
       const backButton =
         container.createEl("button", {
-          text: "出題範囲に戻る",
+          text: t("出題範囲に戻る"),
         });
 
       backButton.onclick = () => {
@@ -1987,7 +1975,7 @@ export class QuizView extends ItemView {
     const result = this.getSessionResult();
 
     container.createEl("p", {
-      text: `出題問題数：${total}問`,
+      text: t("出題問題数：{0}問", total),
     });
 
     const summary = container.createDiv({
@@ -2015,26 +2003,26 @@ export class QuizView extends ItemView {
     };
 
     addSummaryCard(
-      "正解",
-      `${result.correct}問`,
+      t("正解"),
+      t("{0}問", result.correct),
       "is-correct"
     );
 
     addSummaryCard(
-      "不正解",
-      `${result.incorrect}問`,
+      t("不正解"),
+      t("{0}問", result.incorrect),
       "is-incorrect"
     );
 
     addSummaryCard(
-      "未採点",
-      `${result.unanswered}問`,
+      t("未採点"),
+      t("{0}問", result.unanswered),
       "is-unanswered"
     );
 
     addSummaryCard(
-      "採点除外",
-      `${result.excluded}問`,
+      t("採点除外"),
+      t("{0}問", result.excluded),
       "is-excluded"
     );
 
@@ -2047,7 +2035,7 @@ export class QuizView extends ItemView {
     });
 
     rate.createEl("h3", {
-      text: "今回の正答率",
+      text: t("今回の正答率"),
     });
 
     rate.createEl("p", {
@@ -2060,8 +2048,8 @@ export class QuizView extends ItemView {
     rate.createEl("p", {
       cls: "kokushi-session-note",
       text:
-        `正解扱い ${result.correct + result.excluded}問 / 採点済み ${result.correct + result.incorrect + result.excluded}問` +
-        "（採点除外は正解扱い）",
+        t("正解扱い {0}問 / 採点済み {1}問", result.correct + result.excluded, result.correct + result.incorrect + result.excluded) +
+        t("（採点除外は正解扱い）"),
     });
 
     // ========================================
@@ -2069,7 +2057,7 @@ export class QuizView extends ItemView {
     // ========================================
 
     container.createEl("h3", {
-      text: "演習した問題の一覧",
+      text: t("演習した問題の一覧"),
     });
 
     const tableWrapper =
@@ -2090,11 +2078,11 @@ export class QuizView extends ItemView {
       thead.createEl("tr");
 
     for (const title of [
-      "出典",
-      "問題番号",
-      "正答",
-      "自分の解答",
-      "正誤",
+      t("出典"),
+      t("問題番号"),
+      t("正答"),
+      t("自分の解答"),
+      t("正誤"),
     ]) {
       headerRow.createEl("th", {
         text: title,
@@ -2174,16 +2162,7 @@ export class QuizView extends ItemView {
 
       statusEl.setText(status);
 
-      const statusClass =
-        status === "正解"
-          ? "is-correct"
-          : status === "不正解"
-            ? "is-incorrect"
-            : status === "採点除外"
-              ? "is-excluded"
-              : "is-unanswered";
-
-      statusEl.addClass(statusClass);
+      statusEl.addClass(`is-${state?.graded ?? "unanswered"}`);
     }
 
     // ========================================
@@ -2201,7 +2180,7 @@ export class QuizView extends ItemView {
     const replayActions = actions.createDiv({ cls: "kokushi-session-replay" });
     const restartButton =
       replayActions.createEl("button", {
-        text: "同じ問題でもう一度",
+        text: t("同じ問題でもう一度"),
       });
 
     restartButton.onclick = () => {
@@ -2215,7 +2194,7 @@ export class QuizView extends ItemView {
       const grade = this.questionStates.get(indexes.get(questionKey(question)) ?? -1)?.graded;
       return grade == null || grade === "incorrect";
     })).flat();
-    const review = replayActions.createEl("button", { type: "button", text: "間違えた問題を復習" });
+    const review = replayActions.createEl("button", { type: "button", text: t("間違えた問題を復習") });
     review.disabled = reviewQuestions.length === 0;
     review.onclick = () => {
       if (review.disabled) return;
@@ -2231,7 +2210,7 @@ export class QuizView extends ItemView {
 
     const scopeButton =
       actions.createEl("button", {
-        text: "出題範囲を選び直す",
+        text: t("出題範囲を選び直す"),
         cls: "mod-cta",
       });
 
@@ -2240,22 +2219,28 @@ export class QuizView extends ItemView {
     const session = this.session;
     if (session) {
       const discard = actions.createEl("button", {
-        type: "button", text: "演習結果を破棄", cls: "mod-warning",
+        type: "button", text: t("演習結果を破棄"), cls: "mod-warning",
       });
       discard.onclick = () => {
         new DiscardSessionModal(this.app, async includeAttempts => {
           await this.sessionService.discard(session.id, includeAttempts);
           if (this.session === session) await this.openScopeFromDashboard();
-        }, "演習結果を破棄").open();
+        }, t("演習結果を破棄")).open();
       };
     }
   }
 
   private async leaveDiscardedSession(): Promise<boolean> {
     if (!this.session || !this.sessionService.isDiscarded(this.session.id)) return false;
-    new Notice("この演習履歴は破棄されています。");
+    new Notice(t("この演習履歴は破棄されています。"));
     await this.openScopeFromDashboard();
     return true;
+  }
+
+  public async refreshPreset(): Promise<void> {
+    if (this.contentEl.classList.contains("kokushi-scope") && !this.session && !this.closing) {
+      await this.renderScopeSelection();
+    }
   }
 
   public async openScopeFromDashboard(): Promise<void> {
@@ -2288,17 +2273,17 @@ export class QuizView extends ItemView {
 
       const missing = requested.length - questions.length;
       if (mode === "all" && missing > 0) {
-        new Notice(`${missing}問が見つからないため、このセットの再演習を開始できません。`);
+        new Notice(t("{0}問が見つからないため、このセットの再演習を開始できません。", missing));
         return false;
       }
 
       if (questions.length === 0) {
-        new Notice("再演習できる問題がありません。");
+        new Notice(t("再演習できる問題がありません。"));
         return false;
       }
 
       if (missing > 0) {
-        new Notice(`${missing}問が見つからないため、読み込めた問題で再演習します。`);
+        new Notice(t("{0}問が見つからないため、読み込めた問題で再演習します。", missing));
       }
 
       this.allQuestions = allQuestions;
@@ -2311,7 +2296,7 @@ export class QuizView extends ItemView {
         if (unit && (mode !== "all" || unit.every(item => chosenKeys.has(questionKey(item))))) expanded.add(unit);
       }
       if (mode === "all" && [...expanded].flat().length !== questions.length) {
-        new Notice("連問の構成が変更されたため、このセットで再演習できません。");
+        new Notice(t("連問の構成が変更されたため、このセットで再演習できません。"));
         return false;
       }
       this.questions = [...expanded].flat();
@@ -2327,7 +2312,7 @@ export class QuizView extends ItemView {
       return true;
     } catch (error) {
       console.error("[Kokushi] History retry error", error);
-      new Notice("再演習する問題を読み込めませんでした。");
+      new Notice(t("再演習する問題を読み込めませんでした。"));
       return false;
     } finally {
       this.saving = false;

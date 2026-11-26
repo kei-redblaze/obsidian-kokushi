@@ -1,10 +1,11 @@
+import { t } from "../i18n";
 import { bindAppearance, unbindAppearance } from "./KokushiAppearance";
 import { App, FuzzySuggestModal, Modal, Platform, TFile } from "obsidian";
 
 export class StudyNotePicker extends FuzzySuggestModal<TFile> {
   constructor(app: App, private notes: TFile[], private choose: (file: TFile) => void) {
     super(app);
-    this.setPlaceholder("関連付けるノートを検索");
+    this.setPlaceholder(t("関連付けるノートを検索"));
   }
 
   getItems(): TFile[] {
@@ -32,13 +33,13 @@ export class CreateStudyNoteModal extends Modal {
   }
 
   onOpen(): void {
-    this.setTitle("新規ノート");
+    this.setTitle(t("新規ノート"));
     const form = this.contentEl.createEl("form");
     bindAppearance(this.app, this.modalEl);
     const fields = form.createDiv({ cls: "kokushi-note-create-row" });
-    const input = fields.createEl("input", { type: "text", placeholder: "ノート名を入力", attr: { "aria-label": "ノート名" } });
+    const input = fields.createEl("input", { type: "text", placeholder: t("ノート名を入力"), attr: { "aria-label": t("ノート名") } });
     input.required = true;
-    const submit = fields.createEl("button", { text: "作成", cls: "mod-cta", type: "submit" });
+    const submit = fields.createEl("button", { text: t("作成"), cls: "mod-cta", type: "submit" });
     const status = form.createDiv({ cls: "kokushi-study-error", attr: { role: "status" } });
     let created: TFile | null = null;
 
@@ -57,10 +58,10 @@ export class CreateStudyNoteModal extends Modal {
       } catch (error) {
         if (created) {
           console.error("[Kokushi] New note link error", error);
-          status.setText("ノートを作成しました。関連付けを保存できませんでした。");
-          submit.setText("関連付けを再試行");
+          status.setText(t("ノートを作成しました。関連付けを保存できませんでした。"));
+          submit.setText(t("関連付けを再試行"));
         } else {
-          status.setText(error instanceof Error ? error.message : "ノートを作成できませんでした。");
+          status.setText(error instanceof Error ? error.message : t("ノートを作成できませんでした。"));
           input.disabled = false;
           input.focus();
         }

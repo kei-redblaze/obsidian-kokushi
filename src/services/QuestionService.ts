@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { App, Notice, TFile } from "obsidian";
 import { Question } from "../types";
 import { PATHS } from "../constants";
@@ -47,14 +48,14 @@ export class QuestionService {
           if (checkImages) issues.push(...this.checkImages(question));
         }
       } catch (error) {
-        issues.push({ path: file.path, reason: error instanceof Error ? error.message : "問題を読み込めませんでした" });
+        issues.push({ path: file.path, reason: error instanceof Error ? error.message : t("問題を読み込めませんでした") });
       }
     }
     for (const matches of occurrences.values()) {
       if (matches.length < 2) continue;
       for (const { path, id } of matches) {
         rejected.add(path);
-        issues.push({ path, id, reason: "同じ出典に同じ問題番号が複数あります" });
+        issues.push({ path, id, reason: t("同じ出典に同じ問題番号が複数あります") });
       }
     }
     const questions = entries.filter(question => !rejected.has(question.path));
@@ -70,13 +71,13 @@ export class QuestionService {
   async reload(question: Question): Promise<Question> {
     const questions = await this.reloadFile(question.path);
     const updated = questions.find(item => questionKey(item) === questionKey(question));
-    if (!updated) throw new Error("問題番号が見つかりません");
+    if (!updated) throw new Error(t("問題番号が見つかりません"));
     return updated;
   }
 
   async reloadFile(path: string): Promise<Question[]> {
     const file = this.app.vault.getAbstractFileByPath(path);
-    if (!(file instanceof TFile)) throw new Error("問題Markdownが見つかりません");
+    if (!(file instanceof TFile)) throw new Error(t("問題Markdownが見つかりません"));
     const { questions, issues } = this.readFile(file, await this.app.vault.read(file));
     const issue = issues[0];
     if (issue) throw new Error([issue.id, issue.reason].filter(Boolean).join(" — "));
@@ -85,8 +86,8 @@ export class QuestionService {
 
   private readFile(file: TFile, markdown: string): { questions: Question[]; issues: QuestionIssue[] } {
     const [source, ...relative] = file.path.slice(PATHS.questions.length + 1).split("/");
-    if (!source || !relative.length) throw new Error("問題は出典フォルダー内に置いてください");
-    if (!isQuestionNumber(file.basename) || source.includes("\\")) throw new Error("問題番号または出典名が不正です");
+    if (!source || !relative.length) throw new Error(t("問題は出典フォルダー内に置いてください"));
+    if (!isQuestionNumber(file.basename) || source.includes("\\")) throw new Error(t("問題番号または出典名が不正です"));
     const result = parseQuestionFile(markdown, file.basename);
     return {
       questions: result.questions.map(question => ({ ...question, source, path: file.path })),
@@ -108,7 +109,7 @@ export class QuestionService {
     for (const link of links) {
       if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(link)) continue;
       if (!resolveQuestionAsset(this.app, link, question.path)) {
-        issues.push({ path: question.path, id: question.id, reason: `画像が見つかりません（${link}）` });
+        issues.push({ path: question.path, id: question.id, reason: t("画像が見つかりません（{0}）", link) });
       }
     }
     return issues;
@@ -120,9 +121,9 @@ export class QuestionService {
     if (report === this.reportedIssues) return;
     this.reportedIssues = report;
     if (!issues.length) return;
-    console.warn("[Kokushi] 問題セットの読み込みエラー\n" + report);
+    console.warn(t("[Kokushi] 問題セットの読み込みエラー\n") + report);
     const summary = lines.slice(0, 3).join("\n");
-    const remaining = issues.length > 3 ? `\nほか${issues.length - 3}件。全件は開発者コンソールを参照してください。` : "";
-    new Notice(`問題セットの書式を確認してください（${issues.length}件）\n${summary}${remaining}`, 10000);
+    const remaining = issues.length > 3 ? t("\nほか{0}件。全件は開発者コンソールを参照してください。", issues.length - 3) : "";
+    new Notice(t("問題セットの書式を確認してください（{0}件）\n{1}{2}", issues.length, summary, remaining), 10000);
   }
 }

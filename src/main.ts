@@ -1,5 +1,6 @@
 
 import { Notice, Plugin } from "obsidian";
+import { setLanguagePreference, t } from "./i18n";
 
 import {
   QuizView,
@@ -29,6 +30,7 @@ export default class KokushiPlugin extends Plugin {
       new QuestionService(this.app);
 
     let preferences = readPreferences(await this.loadData());
+    setLanguagePreference(preferences.language);
     const appearance = installAppearance(this.app, preferences);
     this.register(() => appearance.clear());
     let pendingPreferences = Promise.resolve();
@@ -36,14 +38,22 @@ export default class KokushiPlugin extends Plugin {
       const task = pendingPreferences.then(async () => {
         const next = readPreferences({ ...preferences, ...change });
         await this.saveData(next);
+        const presetChanged = preferences.presetCount !== next.presetCount;
         preferences = next;
         appearance.update(next);
+        if (presetChanged) {
+          for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_KOKUSHI)) {
+            if (leaf.view instanceof QuizView) {
+              void leaf.view.refreshPreset().catch((error: unknown) => { console.error("[Kokushi] Preset refresh error", error); });
+            }
+          }
+        }
         return next;
       });
       pendingPreferences = task.then(() => {}, () => {});
       return task.catch((error: unknown) => {
         console.error("[Kokushi] Settings save error", error);
-        new Notice("設定を保存できませんでした。");
+        new Notice(t("設定を保存できませんでした。"));
         return null;
       });
     }));
@@ -59,15 +69,15 @@ export default class KokushiPlugin extends Plugin {
       await sessionService.recoverDiscards();
     } catch (error) {
       console.error("[Kokushi] Discard recovery error", error);
-      new Notice("保留中の履歴削除を完了できませんでした。");
+      new Notice(t("保留中の履歴削除を完了できませんでした。"));
     }
     const studyService = new QuestionStudyService(this.app);
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
       void studyService.trackRename(file, oldPath).then(failed => {
-        if (failed > 0) new Notice(`${failed}件の問題で関連ノートのパスを更新できませんでした。`);
+        if (failed > 0) new Notice(t("{0}件の問題で関連ノートのパスを更新できませんでした。", failed));
       }).catch(error => {
         console.error("[Kokushi] Related note rename error", error);
-        new Notice("関連ノートのパスを更新できませんでした。");
+        new Notice(t("関連ノートのパスを更新できませんでした。"));
       });
     }));
 
@@ -85,7 +95,7 @@ export default class KokushiPlugin extends Plugin {
 
     this.addRibbonIcon(
       "graduation-cap",
-      "演習を開く",
+      t("演習を開く"),
       () => {
         void this.activateQuiz();
       }
@@ -93,7 +103,7 @@ export default class KokushiPlugin extends Plugin {
 
     this.addCommand({
       id: "open-quiz",
-      name: "演習を開く",
+      name: t("演習を開く"),
       callback: () => {
         void this.activateQuiz();
       },
@@ -125,7 +135,7 @@ export default class KokushiPlugin extends Plugin {
 
       if (!(leaf.view instanceof QuizView)) {
         throw new Error(
-          "QuizViewの取得に失敗しました"
+          t("QuizViewの取得に失敗しました")
         );
       }
     
@@ -154,7 +164,7 @@ export default class KokushiPlugin extends Plugin {
         async id => {
           const leaf = sessionService.getActiveLeaf(id);
           if (!leaf) {
-            new Notice("演習画面が見つかりませんでした。");
+            new Notice(t("演習画面が見つかりませんでした。"));
             return false;
           }
           await this.app.workspace.revealLeaf(leaf);
@@ -171,7 +181,7 @@ export default class KokushiPlugin extends Plugin {
     // リボンアイコン
     this.addRibbonIcon(
       "chart-no-axes-combined",
-      "ダッシュボード",
+      t("ダッシュボード"),
       () => {
         void this.openDashboard();
       }
@@ -180,7 +190,7 @@ export default class KokushiPlugin extends Plugin {
     // コマンドパレット
     this.addCommand({
       id: "open-kokushi-dashboard",
-      name: "ダッシュボードを開く",
+      name: t("ダッシュボードを開く"),
       callback: () => {
         void this.openDashboard();
       },

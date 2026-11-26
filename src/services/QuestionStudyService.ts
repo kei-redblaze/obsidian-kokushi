@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { App, Platform, TAbstractFile, TFile, TFolder, WorkspaceLeaf } from "obsidian";
 import { Document, isMap, isScalar, isSeq, parseDocument, Scalar } from "yaml";
 import { PATHS } from "../constants";
@@ -44,7 +45,7 @@ export class QuestionStudyService {
   async linkNote(question: QuestionReference, note: TFile): Promise<QuestionStudy> {
     await this.updateStudy(question, true, doc => {
       const path = note.path;
-      if (this.getNote(path) !== note) throw new Error("関連付けられるノートが見つかりません");
+      if (this.getNote(path) !== note) throw new Error(t("関連付けられるノートが見つかりません"));
       if (noteLinks(doc).some(link => link.value === path)) return false;
 
       if (!doc.has("relatedNotes")) doc.set("relatedNotes", doc.createNode([]));
@@ -83,19 +84,19 @@ export class QuestionStudyService {
     );
     if (!title || title.startsWith(".") || title.endsWith(".") || invalid ||
         /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(title)) {
-      throw new Error("ノート名に使えない文字があるか、名前が空です。");
+      throw new Error(t("ノート名に使えない文字があるか、名前が空です。"));
     }
 
     await ensureFolder(this.app.vault, PATHS.notes);
     const path = `${PATHS.notes}/${title}.md`;
     if (this.app.vault.getAbstractFileByPath(path)) {
-      throw new Error("同名のノートがあります。「既存ノートを関連付け」から選べます。");
+      throw new Error(t("同名のノートがあります。「既存ノートを関連付け」から選べます。"));
     }
     return this.app.vault.create(path, `# ${title}\n`);
   }
 
   async openNote(note: TFile): Promise<void> {
-    if (this.getNote(note.path) !== note) throw new Error("ノートが見つかりません");
+    if (this.getNote(note.path) !== note) throw new Error(t("ノートが見つかりません"));
 
     const workspace = this.app.workspace;
     const leaves = workspace.getLeavesOfType("markdown");
@@ -166,7 +167,7 @@ export class QuestionStudyService {
   private getStudyFile(path: string): TFile | null {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (file instanceof TFile || file === null) return file;
-    throw new Error("問題の学習データの保存先がファイルではありません");
+    throw new Error(t("問題の学習データの保存先がファイルではありません"));
   }
 
   private updateStudy(
@@ -216,7 +217,7 @@ function isNotePath(path: unknown): path is string {
 function parseStudy(data: string): Document {
   const doc = parseDocument(data);
   if (doc.errors.length || !isMap(doc.contents)) {
-    throw new Error("問題の学習データのYAMLが不正です");
+    throw new Error(t("問題の学習データのYAMLが不正です"));
   }
   return doc;
 }
@@ -228,7 +229,7 @@ function noteLinks(doc: Document): Scalar<string>[] {
   if (!isSeq(node) || !node.items.every((item): item is Scalar<string> =>
     isScalar(item) && typeof item.value === "string"
   )) {
-    throw new Error("relatedNotes は文字列の一覧で指定してください");
+    throw new Error(t("relatedNotes は文字列の一覧で指定してください"));
   }
   return node.items;
 }

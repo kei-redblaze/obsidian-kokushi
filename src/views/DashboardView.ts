@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { bindAppearance, unbindAppearance } from "./KokushiAppearance";
 
 import {
@@ -46,7 +47,7 @@ export class DashboardView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "ダッシュボード";
+    return t("ダッシュボード");
   }
 
   getIcon(): string {
@@ -82,7 +83,7 @@ export class DashboardView extends ItemView {
     this.contentEl.empty();
     this.contentEl.scrollTop = 0;
     this.contentEl.createEl("p", {
-      text: "学習統計を集計しています...",
+      text: t("学習統計を集計しています..."),
     });
 
     try {
@@ -104,11 +105,11 @@ export class DashboardView extends ItemView {
 
       this.contentEl.empty();
       this.contentEl.createEl("p", {
-        text: "ダッシュボードの読み込みに失敗しました。",
+        text: t("ダッシュボードの読み込みに失敗しました。"),
       });
 
       new Notice(
-        "学習統計を取得できませんでした"
+        t("学習統計を取得できませんでした")
       );
     }
   }
@@ -133,16 +134,16 @@ export class DashboardView extends ItemView {
     root.addClass("kokushi-dashboard");
 
     const heading = root.createDiv({ cls: "kokushi-section-heading" });
-    heading.createEl("h2", { text: "ダッシュボード" });
-    const refreshButton = heading.createEl("button", { text: "更新", type: "button" });
+    heading.createEl("h2", { text: t("ダッシュボード") });
+    const refreshButton = heading.createEl("button", { text: t("更新"), type: "button" });
     refreshButton.onclick = () => { void this.showOverview(); };
 
     renderInvalidAttempts(root, stats.invalidLines);
 
     root.createEl("p", {
       text:
-        `読み込み済み問題数：` +
-        `${stats.totalQuestions}問`,
+        t("読み込み済み問題数：") +
+        t("{0}問", stats.totalQuestions),
     });
 
     // ----------------------------------------
@@ -179,44 +180,44 @@ export class DashboardView extends ItemView {
     };
 
     addCard(
-      "学習進捗",
+      t("学習進捗"),
       `${stats.studiedQuestions} / ` +
         `${stats.totalQuestions}`,
       this.formatRate(stats.progressRate)
     );
 
     addCard(
-      "未回答問題",
-      `${stats.unansweredQuestions}問`,
-      "まだ解答したことのない問題"
+      t("未回答問題"),
+      t("{0}問", stats.unansweredQuestions),
+      t("まだ解答したことのない問題")
     );
 
     addCard(
-      "最新正答率",
+      t("最新正答率"),
       this.formatRate(stats.latestAccuracy),
       `${stats.latestCorrect} / ` +
-        `${stats.latestGraded}問`
+        t("{0}問", stats.latestGraded)
     );
 
     addCard(
-      "累積正答率",
+      t("累積正答率"),
       this.formatRate(
         stats.cumulativeAccuracy
       ),
       `${stats.cumulativeCorrect} / ` +
-        `${stats.cumulativeGraded}回`
+        t("{0}回", stats.cumulativeGraded)
     );
 
     addCard(
-      "要復習問題",
-      `${stats.reviewQuestions}問`,
-      "最新の評価が△または×"
+      t("要復習問題"),
+      t("{0}問", stats.reviewQuestions),
+      t("最新の評価が△または×")
     );
 
     addCard(
-      "累積解答数",
-      `${stats.totalAttempts}回`,
-      "重複解答・採点除外を含む"
+      t("累積解答数"),
+      t("{0}回", stats.totalAttempts),
+      t("重複解答・採点除外を含む")
     );
 
     // ----------------------------------------
@@ -229,13 +230,13 @@ export class DashboardView extends ItemView {
 
     const scopeButton = quizActions.createEl("button", {
       type: "button",
-      text: "出題範囲の選択へ",
+      text: t("出題範囲の選択へ"),
       cls: "mod-cta kokushi-dashboard-scope",
     });
     scopeButton.onclick = () => {
       void this.onOpenScope().catch(error => {
         console.error("[Kokushi] Open quiz scope error", error);
-        new Notice("出題範囲を開けませんでした。");
+        new Notice(t("出題範囲を開けませんでした。"));
       });
     };
 
@@ -244,17 +245,17 @@ export class DashboardView extends ItemView {
     // ----------------------------------------
 
     root.createEl("h3", {
-      text: "日別学習推移",
+      text: t("日別学習推移"),
     });
 
     const periodGroup = root.createDiv({
       cls: "kokushi-scope-buttons",
-      attr: { role: "group", "aria-label": "日別学習推移の表示期間" },
+      attr: { role: "group", "aria-label": t("日別学習推移の表示期間") },
     });
     const periods = [
-      { value: "7", text: "直近7日" },
-      { value: "30", text: "直近30日" },
-      { value: "all", text: "全期間" },
+      { value: "7", text: t("直近7日") },
+      { value: "30", text: t("直近30日") },
+      { value: "all", text: t("全期間") },
     ] as const;
 
     const chartArea = root.createDiv({
@@ -272,11 +273,11 @@ export class DashboardView extends ItemView {
             );
 
       const attemptsChart = chartArea.createDiv({ cls: "kokushi-dashboard-chart" });
-      attemptsChart.createEl("h4", { text: "日別解答回数" });
+      attemptsChart.createEl("h4", { text: t("日別解答回数") });
       this.renderBarChart(attemptsChart, days);
 
       const accuracyChart = chartArea.createDiv({ cls: "kokushi-dashboard-chart" });
-      accuracyChart.createEl("h4", { text: "日別正答率" });
+      accuracyChart.createEl("h4", { text: t("日別正答率") });
       this.renderLineChart(accuracyChart, days);
     };
 
@@ -301,7 +302,7 @@ export class DashboardView extends ItemView {
     updateCharts();
 
     const sessionSection = root.createDiv();
-    sessionSection.createEl("h3", { text: "演習履歴" });
+    sessionSection.createEl("h3", { text: t("演習履歴") });
     void renderSessionHistory(
       sessionSection, this.app, this.sessionService, {
         retry: this.onRetrySession, resume: this.onResumeSession, showActive: this.onShowActive,
@@ -310,12 +311,12 @@ export class DashboardView extends ItemView {
     );
 
     const attemptSection = root.createDiv();
-    attemptSection.createEl("h3", { text: "最近の解答履歴" });
+    attemptSection.createEl("h3", { text: t("最近の解答履歴") });
     renderAttemptHistory(attemptSection, stats.recent, attempt => new AttemptPreviewModal(this.app, attempt, this.questionService).open());
     if (stats.totalAttempts > DASHBOARD_HISTORY_LIMIT) {
       const more = attemptSection.createEl("button", {
-        text: "すべて表示",
-        attr: { "aria-label": "解答履歴をすべて表示" },
+        text: t("すべて表示"),
+        attr: { "aria-label": t("解答履歴をすべて表示") },
       });
       more.type = "button";
       more.onclick = () => { void this.openHistory("attempts"); };
@@ -330,11 +331,11 @@ export class DashboardView extends ItemView {
     root.scrollTop = 0;
     const header = root.createDiv({ cls: "kokushi-section-heading" });
     const heading = header.createEl("h2", {
-      text: kind === "sessions" ? "演習履歴" : "解答履歴",
+      text: kind === "sessions" ? t("演習履歴") : t("解答履歴"),
       attr: { tabindex: "-1" },
     });
     heading.focus();
-    const back = header.createEl("button", { type: "button", cls: "mod-cta", text: "ダッシュボードに戻る" });
+    const back = header.createEl("button", { type: "button", cls: "mod-cta", text: t("ダッシュボードに戻る") });
     back.onclick = () => { void this.showOverview(); };
 
     const content = root.createDiv({ cls: "kokushi-history-page" });
@@ -346,7 +347,7 @@ export class DashboardView extends ItemView {
       return;
     }
 
-    const status = content.createEl("p", { text: "解答履歴を読み込んでいます…" });
+    const status = content.createEl("p", { text: t("解答履歴を読み込んでいます…") });
     try {
       const history = await this.statisticsService.getAttemptHistory();
       if (version !== this.renderVersion) return;
@@ -358,7 +359,7 @@ export class DashboardView extends ItemView {
     } catch (error) {
       if (version !== this.renderVersion) return;
       console.error("[Kokushi] Attempt history load error", error);
-      status.setText("解答履歴を読み込めませんでした。");
+      status.setText(t("解答履歴を読み込めませんでした。"));
       status.addClass("kokushi-dashboard-warning");
     }
   }
@@ -512,8 +513,8 @@ export class DashboardView extends ItemView {
     root.createEl("p", {
       cls: "kokushi-dashboard-chart-caption",
       text:
-        "縦軸：解答回数 " +
-        `（最大 ${maximum}回）`,
+        t("縦軸：解答回数 ") +
+        t("（最大 {0}回）", maximum),
     });
   }
 
@@ -673,8 +674,8 @@ export class DashboardView extends ItemView {
     root.createEl("p", {
       cls: "kokushi-dashboard-chart-caption",
       text:
-        "採点対象の解答がない日は" +
-        "正答率を表示しません。",
+        t("採点対象の解答がない日は") +
+        t("正答率を表示しません。"),
     });
   }
 }

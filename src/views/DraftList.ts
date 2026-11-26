@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { App } from "obsidian";
 import type { SessionService } from "../services/SessionService";
 import { openSessionDetails, SessionDetailActions } from "./SessionDetailsModal";
@@ -10,7 +11,7 @@ export function renderDraftList(
   actions: Pick<SessionDetailActions, "resume" | "retry">,
 ): void {
   const heading = root.createDiv({ cls: "kokushi-section-heading" });
-  heading.createEl("h3", { text: "未完了の演習" });
+  heading.createEl("h3", { text: t("未完了の演習") });
   const content = root.createDiv();
   let generation = 0;
 
@@ -21,18 +22,18 @@ export function renderDraftList(
       if (request !== generation) return;
       content.empty();
       if (drafts.length === 0) {
-        content.createEl("p", { text: "未完了の演習はありません。" });
+        content.createEl("p", { text: t("未完了の演習はありません。") });
         return;
       }
 
       const list = content.createEl("ul");
       for (const draft of drafts) {
         const item = list.createEl("li");
-        const label = `${formatSessionDate(draft.recordedAt)}、第${draft.currentIndex + 1}問 / 全${draft.total}問`;
+        const label = t("{0}、{1}/{2} 問", formatSessionDate(draft.recordedAt), draft.currentIndex + 1, draft.total);
         const button = item.createEl("button", {
-          text: "詳細",
+          text: t("詳細"),
           type: "button",
-          attr: { "aria-label": `${label}の演習の詳細` },
+          attr: { "aria-label": t("{0}の演習の詳細", label) },
         });
         button.onclick = () => { void openSessionDetails(app, service, draft.id, { ...actions, refresh }); };
         item.createSpan({ text: ` ${label}` });
@@ -41,7 +42,7 @@ export function renderDraftList(
       if (request !== generation) return;
       console.error("[Kokushi] Draft list error", error);
       content.empty();
-      content.createEl("p", { text: "未完了の演習を読み込めませんでした。" });
+      content.createEl("p", { text: t("未完了の演習を読み込めませんでした。") });
     }
   };
   void refresh();

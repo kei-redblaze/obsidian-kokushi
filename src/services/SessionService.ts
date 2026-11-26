@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { TFile, TFolder, Vault, WorkspaceLeaf } from "obsidian";
 import { ATTEMPTS_FOLDER, PATHS } from "../constants";
 import { SessionDetails, SessionRecord, SessionResult } from "../types";
@@ -59,10 +60,10 @@ export class SessionService {
   }
 
   save(session: SessionRecord): Promise<void> {
-    if (!SESSION_ID.test(session.id)) throw new Error("演習履歴IDが不正です");
+    if (!SESSION_ID.test(session.id)) throw new Error(t("演習履歴IDが不正です"));
 
     const task = this.pending.then(async () => {
-      if (this.discarded.has(session.id)) throw new Error("演習履歴は破棄されています");
+      if (this.discarded.has(session.id)) throw new Error(t("演習履歴は破棄されています"));
       await ensureFolder(this.vault, ATTEMPTS_FOLDER);
       await ensureFolder(this.vault, PATHS.sessions);
       const path = `${PATHS.sessions}/${session.id}.json`;
@@ -81,14 +82,14 @@ export class SessionService {
 
   async discard(id: string, includeAttempts: boolean): Promise<void> {
     if (!SESSION_ID.test(id) || this.activeDrafts.has(id) || this.discarding.has(id)) {
-      throw new Error("この演習は破棄できません");
+      throw new Error(t("この演習は破棄できません"));
     }
     this.discarding.add(id);
 
     const task = this.pending.then(async () => {
       const path = `${PATHS.sessions}/${id}.json`;
       const file = this.vault.getAbstractFileByPath(path);
-      if (!(file instanceof TFile)) throw new Error("演習履歴が見つかりません");
+      if (!(file instanceof TFile)) throw new Error(t("演習履歴が見つかりません"));
 
       if (!includeAttempts) {
         await this.trashFile(file);
@@ -97,7 +98,7 @@ export class SessionService {
 
       // 再起動時にも処理を続けられるよう、先に削除予定のファイル名へ移す。
       const staged = `${PATHS.sessions}/${id}.discarding.json`;
-      if (this.vault.getAbstractFileByPath(staged)) throw new Error("削除処理がすでに登録されています");
+      if (this.vault.getAbstractFileByPath(staged)) throw new Error(t("削除処理がすでに登録されています"));
       await this.vault.rename(file, staged);
       try {
         await this.attempts.discardSession(id);
@@ -213,7 +214,7 @@ export class SessionService {
     const folder = this.vault.getAbstractFileByPath(PATHS.sessions);
     if (folder === null) return [];
     if (!(folder instanceof TFolder)) {
-      throw new Error("演習履歴の保存先がフォルダーではありません");
+      throw new Error(t("演習履歴の保存先がフォルダーではありません"));
     }
 
     return folder.children
@@ -226,7 +227,7 @@ export class SessionService {
   private async readSession(file: TFile): Promise<SessionRecord> {
     const value: unknown = JSON.parse(await this.vault.cachedRead(file));
     normalizeLegacyScope(value);
-    if (!isSessionRecord(value, file.basename)) throw new Error("演習履歴の形式が不正です");
+    if (!isSessionRecord(value, file.basename)) throw new Error(t("演習履歴の形式が不正です"));
     const { correct, incorrect, excluded } = value.result;
     return { ...value, result: { ...value.result, accuracy: sessionAccuracy(correct, incorrect, excluded) } };
   }

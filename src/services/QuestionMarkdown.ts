@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { Question, QuestionOption } from "../types";
 
 import { isQuestionNumber } from "./QuestionIdentity";
@@ -11,11 +12,11 @@ type QuestionContent = Pick<Question, "stem" | "annotation" | "options" | "type"
 export function parseQuestionMarkdown(markdown: string, depth = 2): QuestionContent {
   const sections = readSections(markdown.split(/\r?\n/), depth);
   const stem = sections.get("Question")?.join("\n").trim();
-  if (!stem) throw new Error("## Question に問題文を記述してください");
+  if (!stem) throw new Error(t("## Question に問題文を記述してください"));
 
   const annotation = sections.get("Annotation")?.join("\n").trim() ?? "";
   const answerSection = sections.get("Answer");
-  if (!answerSection) throw new Error("## Answer 見出しがありません");
+  if (!answerSection) throw new Error(t("## Answer 見出しがありません"));
 
   const optionsSection = sections.get("Options");
   const options = optionsSection ? readOptions(optionsSection) : [];
@@ -28,7 +29,7 @@ export function parseQuestionMarkdown(markdown: string, depth = 2): QuestionCont
   if (!optionsSection) {
     const values = groups.map(group => group.trim());
     if (!values.every(value => /^\d+$/.test(value))) {
-      throw new Error("数値の正答は半角数字だけを1行に記述し、候補を空行で区切ってください");
+      throw new Error(t("数値の正答は半角数字だけを1行に記述し、候補を空行で区切ってください"));
     }
     return { stem, annotation, options, type: "numeric", answer: values.map(value => [value]), excluded: false, requiredChoices: 1 };
   }
@@ -37,11 +38,11 @@ export function parseQuestionMarkdown(markdown: string, depth = 2): QuestionCont
   const answer = groups.map(group => {
     const ids = group.split("\n").map(line => {
       const id = line.match(OPTION_LINE)?.[1];
-      if (!id) throw new Error("選択式の正答は「a. 選択肢の本文」の形式で記述してください");
-      if (!optionIds.has(id)) throw new Error(`正答の記号「${id}」が ## Options にありません`);
+      if (!id) throw new Error(t("選択式の正答は「a. 選択肢の本文」の形式で記述してください"));
+      if (!optionIds.has(id)) throw new Error(t("正答の記号「{0}」が ## Options にありません", id));
       return id;
     });
-    if (new Set(ids).size !== ids.length) throw new Error("同じ正答候補の中に重複する記号があります");
+    if (new Set(ids).size !== ids.length) throw new Error(t("同じ正答候補の中に重複する記号があります"));
     return ids;
   });
   const sizes = new Set(answer.map(group => group.length));
@@ -59,17 +60,17 @@ function readOptions(lines: string[]): QuestionOption[] {
     const option = line.match(OPTION_LINE);
     if (option?.[1] && option[2]) {
       const id = option[1];
-      if (ids.has(id)) throw new Error(`## Options の記号「${id}」が重複しています`);
+      if (ids.has(id)) throw new Error(t("## Options の記号「{0}」が重複しています", id));
       ids.add(id);
       current = { id, markdown: option[2] };
       options.push(current);
     } else if (current) {
       current.markdown += "\n" + line;
     } else if (line.trim()) {
-      throw new Error("## Options は「a. 選択肢の本文」の形式で始めてください");
+      throw new Error(t("## Options は「a. 選択肢の本文」の形式で始めてください"));
     }
   }
-  if (!options.length) throw new Error("## Options に選択肢がありません");
+  if (!options.length) throw new Error(t("## Options に選択肢がありません"));
   return options.map(({ id, markdown }) => ({ id, markdown: markdown.trim() }));
 }
 
@@ -96,21 +97,21 @@ export function parseQuestionFile(markdown: string, filenameId: string): {
   const commonHeading = headings[commonIndex];
   const common = commonHeading ? lines.slice(commonHeading.index + 1, headings[commonIndex + 1]?.index).join("\n").trim() : "";
   if (headings.filter(heading => heading.depth === 2 && heading.name === "共通症例").length > 1) {
-    issues.push({ id: "", reason: "## 共通症例 が重複しています" });
+    issues.push({ id: "", reason: t("## 共通症例 が重複しています") });
   }
   if (commonHeading && commonHeading.index >= blocks[0].start) {
-    issues.push({ id: "", reason: "## 共通症例 は最初の小問より前に置いてください" });
+    issues.push({ id: "", reason: t("## 共通症例 は最初の小問より前に置いてください") });
   }
-  if (blocks.length < 2) issues.push({ id: "", reason: "連問には2つ以上の小問が必要です" });
+  if (blocks.length < 2) issues.push({ id: "", reason: t("連問には2つ以上の小問が必要です") });
   if (headings.some(heading => heading.depth === 2 && SECTION_NAMES.some(name => name === heading.name))) {
-    issues.push({ id: "", reason: "連問の Question、Options、Answer、Annotation は ### 見出しで記述してください" });
+    issues.push({ id: "", reason: t("連問の Question、Options、Answer、Annotation は ### 見出しで記述してください") });
   }
   const ids = blocks.map(block => block.id);
   const seen = new Set<string>();
   const questions = blocks.flatMap(({ id, start, end }, index) => {
     try {
-      if (!isQuestionNumber(id)) throw new Error("## 小問 の後に問題番号を記述してください");
-      if (seen.has(id)) throw new Error("小問番号が同じファイルに重複しています");
+      if (!isQuestionNumber(id)) throw new Error(t("## 小問 の後に問題番号を記述してください"));
+      if (seen.has(id)) throw new Error(t("小問番号が同じファイルに重複しています"));
       seen.add(id);
       const content = parseQuestionMarkdown(lines.slice(start, end).join("\n"), 3);
       const stem = common ? `${common}\n\n${content.stem}` : content.stem;
@@ -124,7 +125,7 @@ export function parseQuestionFile(markdown: string, filenameId: string): {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "問題を読み込めませんでした";
+  return error instanceof Error ? error.message : t("問題を読み込めませんでした");
 }
 
 function readSections(lines: string[], depth: number): Map<SectionName, string[]> {
@@ -133,7 +134,7 @@ function readSections(lines: string[], depth: number): Map<SectionName, string[]
   headings.forEach((heading, index) => {
     const section = heading.depth === depth ? SECTION_NAMES.find(name => name === heading.name) : undefined;
     if (!section) return;
-    if (result.has(section)) throw new Error(`## ${section} が重複しています`);
+    if (result.has(section)) throw new Error(t("## {0} が重複しています", section));
     result.set(section, lines.slice(heading.index + 1, headings[index + 1]?.index));
   });
   return result;

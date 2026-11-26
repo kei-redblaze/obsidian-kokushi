@@ -1,54 +1,113 @@
+[日本語はこちら](#日本語)
+
 # Kokushi
 
-Kokushi は、試験の過去問や模擬試験の問題を、Obsidian の Vault で演習するプラグインです。出典や解答状況で出題範囲を絞り、採点結果を記録しながら問題ごとにメモや知識ノートを残せます。
+Kokushi is an Obsidian plugin for practicing past exams and mock questions. Choose questions by source and self-rating, track your results, and attach memos or notes.
 
-## インストール
+## English
+
+### Installation
+
+Requires Obsidian 1.7.2 or later.
+
+#### Using BRAT
+
+1. In **Settings → Community plugins → Browse**, install and enable **BRAT**.
+2. Open **Settings → BRAT** and select **Add beta plugin**.
+3. Enter `https://github.com/kei-redblaze/obsidian-kokushi`, select the latest version, and add it.
+4. In **Settings → Community plugins**, verify that **Kokushi** is enabled. [BRAT documentation](https://github.com/TfTHacker/obsidian42-brat)
+
+#### Manual installation
+
+1. Download `main.js`, `manifest.json`, and `styles.css`. [GitHub Releases](https://github.com/kei-redblaze/obsidian-kokushi/releases/latest)
+2. Put the files in `.obsidian/plugins/obsidian-kokushi/` inside your vault.
+3. Reload Obsidian and enable **Kokushi** in **Settings → Community plugins**.
+
+In **Settings → Kokushi → Initial setup**, select **Create folders** to prepare your vault.
+
+### Question Set Format
+
+Put each source folder directly under `01_Questions/`, with its Markdown files and referenced images. A question is identified by its source and question number. For a standalone question, the number comes from the filename.
+
+```markdown
+## Question
+
+Which instrument records an electrocardiogram?
+
+## Options
+
+a. Electrocardiograph
+b. Spirometer
+
+## Answer
+
+a. Electrocardiograph
+```
+
+Separate alternative answers with a blank line. An optional `## Annotation` appears after grading. For a sequential set, use one Markdown file and keep each original question number in a heading such as `## 小問 Q37`. [Question set guide](docs/question-set-guide.en.md)
+
+See [Usage](docs/usage.md#english) for practice, the dashboard, and linked notes.
+
+### Settings
+
+- **Language** follows Obsidian by default. You can also choose English or Japanese. Reload Obsidian to apply a language change.
+- **Question count preset** sets the fixed count in the practice scope. The default is 10.
+- **Custom color** reveals an accent color picker when turned on.
+- **Initial setup** creates any missing folders among `01_Questions`, `02_Notes`, and `03_Data`.
+- **Check question sets** reports duplicate IDs, invalid headings or answers, and missing local images.
+
+### Vault Data
+
+| Data | Location |
+| --- | --- |
+| Questions, answer keys, and images | `01_Questions/` |
+| Linked notes | `02_Notes/` |
+| Attempts, grades, and self-ratings | `03_Data/Attempts/attempts.jsonl` |
+| Session progress and results | `03_Data/Attempts/sessions/` |
+| Question memos and note links | `03_Data/YAML/<source>/<question-id>.yaml` |
+
+The study YAML is created when a memo or note link is first saved. Updating the answer key in `## Answer` affects future grading. History preserves the grade recorded for each attempt.
+
+### Development and Releases
+
+Use Node.js 24 to match GitHub Actions.
+
+```bash
+npm ci
+npm run build
+npm run lint
+```
+
+`npm run dev` rebuilds the plugin as files change. To release, run `npm version <version> --no-git-tag-version` and update `master`. When the version in `manifest.json` is newer than the latest tag, GitHub Actions builds and publishes the three plugin files.
+
+[License](LICENSE)
+
+## 日本語
+
+Kokushiは、試験の過去問や模擬試験をObsidianのVaultで演習するプラグインです。出典や評価で出題範囲を絞り、採点結果を記録しながら、問題ごとにメモや知識ノートを残せます。
+
+### インストール
 
 Obsidian 1.7.2 以降に対応しています。
 
-### BRATでインストール
+#### BRATでインストール
 
 1. Obsidianの **設定 → コミュニティプラグイン → 閲覧** で **BRAT** を検索し、インストールして有効にします。
 2. **設定 → BRAT** を開き、**Add beta plugin** を選びます。
 3. リポジトリのURL `https://github.com/kei-redblaze/obsidian-kokushi` を入力し、最新バージョンを選んで追加します。
 4. **設定 → コミュニティプラグイン** で **Kokushi** が有効になっていることを確認します。[BRATの公式README](https://github.com/TfTHacker/obsidian42-brat)
 
-### 手動インストール
+#### 手動インストール
 
 1. GitHub Releases から `main.js`、`manifest.json`、`styles.css` をダウンロードします。[GitHub Releases](https://github.com/kei-redblaze/obsidian-kokushi/releases/latest)
 2. Vault の `.obsidian/plugins/obsidian-kokushi/` に3ファイルを置きます。フォルダーがなければ作成します。
 3. Obsidian を開き直し、**設定 → コミュニティプラグイン** で **Kokushi** を有効にします。
 
-インストール後は、[問題セットの形式](#問題セットの形式)に沿ってVaultに問題を配置し、コマンドパレットで **Kokushi: 演習を開く** を選びます。
+インストール後に **設定 → Kokushi → 初期セットアップ** から必要なフォルダーを作成します。
 
-## 演習と復習
+### 問題セットの形式
 
-- 出題範囲は **出典・順序・結果・出題数** の4ブロックで設定します。**結果** は問題ごとの最新評価 **◎・◯・△・×・未解答** で絞り込み、初期状態では◎以外の4つを選択します。解答履歴のない問題は未解答です。固定の出題数は5問、10問、20問です。全問や任意の件数も指定できます。
-- 出典が21件以上あるときは、**選択** から出典一覧を開きます。画面上部の **更新** で、今の設定を保ちながら出典・評価・件数・未完了の演習を再読み込みできます。
-- **解答・採点** を押すと正誤と正答、注記がある場合は注記を表示します。正解・採点除外では **◯**、不正解では **×** が初期評価です。評価は **◎・◯・△・×・未解答** から選び直せ、自動保存されます。**わからない** を選んで採点することもできます。**コピー** は問題番号・問題文・選択肢をテキストとしてコピーします。正答・注記・画像はコピー対象外です。
-- **出題範囲の選択に戻る** で中断した演習は、出題範囲画面の **未完了の演習 → 詳細 → 再開** から続けられます。
-- **演習を終了する** と結果が表示されます。**同じ問題でもう一度** で全問、**間違えた問題を復習** でその回の不正解と未採点の問題を、元の順番で演習できます。
-
-- 問題画像をタップすると拡大表示します。拡大画面の **画像をコピー** で画像1枚をコピーできます。画像コピーの可否は端末環境に依存します。
-- 採点後の **編集** から、問題Markdownを別ペインで開きます。スマートフォンでは別タブで開きます。順次出題の連問では最後の小問の確定後に採点し、セット全体のMarkdownを開けるようになります。
-
-## ダッシュボードと履歴
-
-コマンドパレットの **Kokushi: ダッシュボードを開く** で、学習進捗、正答率、日別推移、演習履歴、解答履歴を確認できます。日別学習推移は **直近7日・直近30日・全期間** のボタンで切り替えます。履歴は各5件まで表示し、6件以上ある場合は **すべて表示** で一覧を開けます。解答履歴から問題番号を押すと、その回の解答・採点結果・評価を閲覧できます。現在の問題文や正答は区別して表示します。履歴を開いても演習は始まりません。
-
-演習履歴の状態ボタンから詳細を開くと、問題ごとの解答、本人の評価、採点結果を確認できます。正答率は採点時の結果を使い、採点済みの採点除外問題は正解として集計します。中断した演習は **再開** で続行でき、完了済みの演習も未採点の問題があれば再開できます。完了済みの詳細では **このセットで再演習** で当時の全問を新しい演習として開始できます。**この回の誤答を再演習** は、採点結果が不正解だった問題が対象です。
-
-**演習履歴を破棄** の確認画面では、初期状態で演習履歴だけを削除します。**この回の解答履歴も削除する** にチェックを入れると、その回の解答も削除され、ダッシュボードの集計から外れます。
-
-## メモと関連ノート
-
-- 採点後のメモ欄に複数行のメモを入力できます。入力が止まったときや欄を離れたときに自動保存されます。
-- 採点後の **ノート → 新規** で `02_Notes/` にノートを作成し、問題に関連付けます。**編集** から既存ノートの追加や関連付けの解除ができます。複数の問題に同じノートを関連付けられます。
-- 関連ノートはリンクから別ペインで開き、スマートフォンでは別タブで開きます。Obsidian 内で `02_Notes/` 配下のノートを改名・移動すると、関連付け先も更新されます。
-
-## 問題セットの形式
-
-出典ごとのフォルダーをVaultの `01_Questions/` 直下に置き、各問題の `.md` と参照画像を入れます。出典名とファイル名で問題を識別します。
+出典ごとのフォルダーをVaultの `01_Questions/` 直下に置き、各問題の `.md` と参照画像を入れます。出典名と問題番号で問題を識別します。単独問題ではファイル名が問題番号です。
 
 ```markdown
 ## Question
@@ -69,11 +128,19 @@ a. 心電計
 
 順次出題する連問は1セットを1つのMarkdownにまとめ、`## 小問 Q37` のように出典元の問題番号を付けます。書式と出題順の詳細は[順次出題する連問](docs/question-set-guide.md#順次出題する連問)を参照してください。
 
-## 設定
+詳しい操作は[使い方](docs/usage.md#日本語)を参照してください。
 
-**Obsidianの設定 → Kokushi** でアクセントカラーをテーマに合わせるか、カスタム色を指定できます。同じ設定画面の **問題セットをチェック** から、問題番号の重複・必須見出し・正答の書式・Vault内の画像参照を確認できます。指摘の一覧から該当のMarkdownを開けます。
+### 設定
 
-## データの保存場所
+**設定 → Kokushi** で次の項目を設定できます。
+
+- **表示言語**から、Obsidianに従う、日本語、Englishを選択できます。変更はObsidianの再読み込み後に反映されます。
+- **出題数のプリセット**で、出題範囲の固定件数を変更します。初期値は10問です。
+- **カスタムカラー**をONにすると、アクセント色を指定できます。
+- **初期セットアップ**で、`01_Questions`、`02_Notes`、`03_Data` のうち存在しないフォルダーを作成します。
+- **問題セットをチェック**で、番号の重複、見出しや正答の書式、画像の参照先を確認できます。
+
+### データの保存場所
 
 | データ | Vault内の保存場所 |
 | --- | --- |
@@ -85,9 +152,7 @@ a. 心電計
 
 YAMLはメモや関連ノートを初めて保存したときに作成します。正答は問題Markdownの `## Answer` で管理します。正答を訂正すると次回の採点から反映され、過去の履歴には当時の採点結果が残ります。問題文や入力形式も変更した場合は、更新された問題を表示して解答をやり直せます。
 
-v1.1はこの構成で動作します。v1.0.7以前の問題別YAMLによる採点、既存の履歴やメモの移行には対応していません。
-
-## 開発・リリース
+### 開発・リリース
 
 GitHub Actions と同じ Node.js 24 を使う場合の手順です。
 
@@ -101,6 +166,6 @@ npm run lint
 
 リリース時は `npm version <新しいバージョン> --no-git-tag-version` でバージョンを更新し、変更を `master` に反映します。`manifest.json` のバージョンが最新タグより新しい場合、GitHub Actions がビルドし、バージョンと同名のタグを作成して3ファイル付きのリリースを公開します。
 
-## ライセンス
+### ライセンス
 
 [ライセンス条文](LICENSE)

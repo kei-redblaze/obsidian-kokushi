@@ -1,6 +1,6 @@
 # 問題セット作成ガイド
 
-[KokushiのREADME](../README.md)に戻る
+[English guide](question-set-guide.en.md) · [KokushiのREADME](../README.md#日本語)
 
 ## ファイルの配置
 
