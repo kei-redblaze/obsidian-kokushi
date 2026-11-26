@@ -1,11 +1,15 @@
 import { Question, QuestionOption } from "../types";
 
+import { isQuestionNumber } from "./QuestionIdentity";
+
 const SECTION_NAMES = ["Question", "Options", "Answer", "Annotation"] as const;
 type SectionName = typeof SECTION_NAMES[number];
 const OPTION_LINE = /^\s*(?:[-*]\s+)?([a-z])[.．]\s+(\S.*)$/;
 
-export function parseQuestionMarkdown(markdown: string): Pick<Question, "stem" | "annotation" | "options" | "type" | "answer" | "excluded" | "requiredChoices"> {
-  const sections = readSections(markdown);
+type QuestionContent = Pick<Question, "stem" | "annotation" | "options" | "type" | "answer" | "excluded" | "requiredChoices">;
+
+export function parseQuestionMarkdown(markdown: string, depth = 2): QuestionContent {
+  const sections = readSections(markdown.split(/\r?\n/), depth);
   const stem = sections.get("Question")?.join("\n").trim();
   if (!stem) throw new Error("## Question に問題文を記述してください");
 
@@ -69,36 +73,87 @@ function readOptions(lines: string[]): QuestionOption[] {
   return options.map(({ id, markdown }) => ({ id, markdown: markdown.trim() }));
 }
 
-function readSections(markdown: string): Map<SectionName, string[]> {
-  const sections = new Map<SectionName, string[]>();
-  let current: string[] | undefined;
+export function parseQuestionFile(markdown: string, filenameId: string): {
+  questions: (QuestionContent & Pick<Question, "id" | "sequence">)[];
+  issues: { id: string; reason: string }[];
+} {
+  const lines = markdown.split(/\r?\n/);
+  const headings = markdownHeadings(lines).filter(heading => heading.depth <= 2);
+  const blocks = headings.flatMap((heading, index) => {
+    if (heading.depth !== 2 || !/^小問(?:\s|$)/.test(heading.name)) return [];
+    return [{ id: heading.name.slice("小問".length).trim(), start: heading.index + 1, end: headings[index + 1]?.index }];
+  });
+  if (!blocks.length) {
+    try {
+      return { questions: [{ id: filenameId, ...parseQuestionMarkdown(markdown) }], issues: [] };
+    } catch (error) {
+      return { questions: [], issues: [{ id: filenameId, reason: errorMessage(error) }] };
+    }
+  }
+
+  const issues: { id: string; reason: string }[] = [];
+  const commonIndex = headings.findIndex(heading => heading.depth === 2 && heading.name === "共通症例");
+  const commonHeading = headings[commonIndex];
+  const common = commonHeading ? lines.slice(commonHeading.index + 1, headings[commonIndex + 1]?.index).join("\n").trim() : "";
+  if (headings.filter(heading => heading.depth === 2 && heading.name === "共通症例").length > 1) {
+    issues.push({ id: "", reason: "## 共通症例 が重複しています" });
+  }
+  if (commonHeading && commonHeading.index >= blocks[0].start) {
+    issues.push({ id: "", reason: "## 共通症例 は最初の小問より前に置いてください" });
+  }
+  if (blocks.length < 2) issues.push({ id: "", reason: "連問には2つ以上の小問が必要です" });
+  if (headings.some(heading => heading.depth === 2 && SECTION_NAMES.some(name => name === heading.name))) {
+    issues.push({ id: "", reason: "連問の Question、Options、Answer、Annotation は ### 見出しで記述してください" });
+  }
+  const ids = blocks.map(block => block.id);
+  const seen = new Set<string>();
+  const questions = blocks.flatMap(({ id, start, end }, index) => {
+    try {
+      if (!isQuestionNumber(id)) throw new Error("## 小問 の後に問題番号を記述してください");
+      if (seen.has(id)) throw new Error("小問番号が同じファイルに重複しています");
+      seen.add(id);
+      const content = parseQuestionMarkdown(lines.slice(start, end).join("\n"), 3);
+      const stem = common ? `${common}\n\n${content.stem}` : content.stem;
+      return [{ ...content, id, stem, sequence: { index, ids } }];
+    } catch (error) {
+      issues.push({ id, reason: errorMessage(error).replace(/## /g, "### ") });
+      return [];
+    }
+  });
+  return { questions, issues };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "問題を読み込めませんでした";
+}
+
+function readSections(lines: string[], depth: number): Map<SectionName, string[]> {
+  const result = new Map<SectionName, string[]>();
+  const headings = markdownHeadings(lines).filter(heading => heading.depth <= depth);
+  headings.forEach((heading, index) => {
+    const section = heading.depth === depth ? SECTION_NAMES.find(name => name === heading.name) : undefined;
+    if (!section) return;
+    if (result.has(section)) throw new Error(`## ${section} が重複しています`);
+    result.set(section, lines.slice(heading.index + 1, headings[index + 1]?.index));
+  });
+  return result;
+}
+
+function markdownHeadings(lines: string[]): { index: number; depth: number; name: string }[] {
+  const headings: { index: number; depth: number; name: string }[] = [];
   let fence: string | undefined;
-  for (const line of markdown.split(/\r?\n/)) {
+  lines.forEach((line, index) => {
     const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
     if (fence) {
-      current?.push(line);
-      if (marker?.[1]?.[0] === fence[0] && marker[1].length >= fence.length && !marker[2]?.trim()) {
-        fence = undefined;
-      }
-      continue;
+      if (marker?.[1]?.[0] === fence[0] && marker[1].length >= fence.length && !marker[2]?.trim()) fence = undefined;
+      return;
     }
     if (marker?.[1]) {
       fence = marker[1];
-      current?.push(line);
-      continue;
+      return;
     }
-    const heading = /^ {0,3}#{1,2}[ \t]+(.+?)\s*$/.exec(line);
-    if (heading) {
-      const section = SECTION_NAMES.find(name => line.trim() === `## ${name}`);
-      current = undefined;
-      if (section) {
-        if (sections.has(section)) throw new Error(`## ${section} が重複しています`);
-        current = [];
-        sections.set(section, current);
-      }
-    } else {
-      current?.push(line);
-    }
-  }
-  return sections;
+    const heading = /^ {0,3}(#{1,6})[ \t]+(.+?)\s*$/.exec(line);
+    if (heading?.[1] && heading[2]) headings.push({ index, depth: heading[1].length, name: heading[2] });
+  });
+  return headings;
 }

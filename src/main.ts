@@ -20,10 +20,33 @@ import {
   StatisticsService,
 } from "./services/StatisticsService";
 
+import { KokushiSettingTab } from "./views/KokushiSettings";
+import { installAppearance, readPreferences } from "./views/KokushiAppearance";
+
 export default class KokushiPlugin extends Plugin {
   async onload(): Promise<void> {
     const questionService =
       new QuestionService(this.app);
+
+    let preferences = readPreferences(await this.loadData());
+    const appearance = installAppearance(this.app, preferences);
+    this.register(() => appearance.clear());
+    let pendingPreferences = Promise.resolve();
+    this.addSettingTab(new KokushiSettingTab(this.app, this, questionService, preferences, change => {
+      const task = pendingPreferences.then(async () => {
+        const next = readPreferences({ ...preferences, ...change });
+        await this.saveData(next);
+        preferences = next;
+        appearance.update(next);
+        return next;
+      });
+      pendingPreferences = task.then(() => {}, () => {});
+      return task.catch((error: unknown) => {
+        console.error("[Kokushi] Settings save error", error);
+        new Notice("設定を保存できませんでした。");
+        return null;
+      });
+    }));
 
     const attemptService =
       new AttemptService(this.app);
@@ -117,12 +140,6 @@ export default class KokushiPlugin extends Plugin {
         questionService,
         statisticsService,
         sessionService,
-
-        // 指定した問題へ
-        async id => {
-          const quiz = await getQuizView();
-          await quiz.openQuestionFromDashboard(id);
-        },
 
         async (record, mode) => {
           const quiz = await getQuizView();

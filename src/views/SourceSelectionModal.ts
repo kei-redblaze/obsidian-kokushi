@@ -1,3 +1,4 @@
+import { bindAppearance, unbindAppearance } from "./KokushiAppearance";
 import { App, Modal } from "obsidian";
 
 export class SourceSelectionModal extends Modal {
@@ -12,6 +13,7 @@ export class SourceSelectionModal extends Modal {
 
   onOpen(): void {
     this.setTitle("出典を選択");
+    bindAppearance(this.app, this.modalEl);
     const selected = new Set(this.initial ?? this.sources);
     const root = this.contentEl;
     root.addClass("kokushi-source-modal");
@@ -56,6 +58,7 @@ export class SourceSelectionModal extends Modal {
   }
 
   onClose(): void {
+    unbindAppearance(this.app, this.modalEl);
     this.contentEl.empty();
   }
 }

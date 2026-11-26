@@ -1,4 +1,4 @@
-import { GradeResult } from "../types";
+import { Attempt, GradeResult } from "../types";
 
 export const GRADE_LABELS: Record<GradeResult, string> = {
   correct: "正解",
@@ -26,4 +26,8 @@ export function renderHistoryGrade(root: HTMLElement, grade: GradeResult | null)
     text: grade === null ? "未採点" : GRADE_LABELS[grade],
     cls: `kokushi-result-grade is-${grade ?? "unanswered"}`,
   });
+}
+
+export function formatAttemptAnswer(attempt: Attempt): string {
+  return (attempt.unknown ?? attempt.selected.length === 0) ? "わからない" : attempt.selected.join(", ");
 }

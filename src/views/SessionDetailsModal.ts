@@ -1,3 +1,4 @@
+import { bindAppearance, unbindAppearance } from "./KokushiAppearance";
 import { App, Modal, Notice } from "obsidian";
 import { HistoryRetryMode, SessionDetails, SessionRecord } from "../types";
 import { SessionService } from "../services/SessionService";
@@ -40,6 +41,7 @@ export class SessionDetailsModal extends Modal {
   }
 
   onOpen(): void {
+    bindAppearance(this.app, this.modalEl);
     const { startedAt, result, questions } = this.record;
     this.setTitle("演習履歴の詳細");
     const root = this.contentEl;
@@ -125,6 +127,7 @@ export class SessionDetailsModal extends Modal {
   }
 
   onClose(): void {
+    unbindAppearance(this.app, this.modalEl);
     this.contentEl.empty();
   }
 }
