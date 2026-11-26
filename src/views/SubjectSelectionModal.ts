@@ -1,10 +1,10 @@
 import { App, Modal } from "obsidian";
-import { UNCLASSIFIED } from "../ai/subjects";
-import { t } from "../i18n";
+import { subjectName, UNCLASSIFIED } from "../ai/subjects";
+import { locale, t } from "../i18n";
 import { bindAppearance, unbindAppearance } from "./KokushiAppearance";
 
 export function subjectLabel(subject: string): string {
-  return subject === UNCLASSIFIED ? t("未分類") : subject;
+  return subject === UNCLASSIFIED ? t("未分類") : subjectName(subject, locale());
 }
 
 export class SubjectSelectionModal extends Modal {

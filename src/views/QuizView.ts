@@ -1,5 +1,5 @@
 import type { KokushiAI } from "../ai/KokushiAI";
-import { matchesSubjects, UNCLASSIFIED } from "../ai/subjects";
+import { matchesSubjects, normalizeSubjectSelection, UNCLASSIFIED } from "../ai/subjects";
 import { SubjectSelectionModal, subjectLabel } from "./SubjectSelectionModal";
 import { locale, t } from "../i18n";
 import { bindAppearance, getPresetCount, unbindAppearance } from "./KokushiAppearance";
@@ -130,7 +130,8 @@ export class QuizView extends ItemView {
     private sessionService: SessionService,
     private studyService: QuestionStudyService,
     private openDashboard: () => Promise<void>,
-    private ai?: KokushiAI
+    private ai?: KokushiAI,
+    private onQuestionsLoaded?: (questions: readonly Question[]) => void
   ) {
     super(leaf);
   }
@@ -154,6 +155,9 @@ export class QuizView extends ItemView {
   async onOpen(): Promise<void> {
     bindAppearance(this.app, this.containerEl ?? this.contentEl);
     this.closing = false;
+    this.registerEvent(this.app.workspace.on("active-leaf-change", leaf => {
+      if (leaf === this.leaf) void this.refreshScopeQuestions();
+    }));
     await this.loadQuestions();
   }
 
@@ -194,6 +198,8 @@ export class QuizView extends ItemView {
   // 問題読み込み
   // ========================================
 
+  private scopeRefresh?: Promise<void>;
+
   private async loadQuestions(): Promise<void> {
     this.contentEl.empty();
     this.resetScroll();
@@ -211,7 +217,7 @@ export class QuizView extends ItemView {
       this.questions = [];
       this.resetSession();
 
-      await this.renderScopeSelection();
+      await this.renderScopeSelection(true);
     } catch (error) {
       console.error(
         "[Kokushi] Question load error",
@@ -234,7 +240,7 @@ export class QuizView extends ItemView {
   // 出題範囲選択
   // ========================================
 
-  private async renderScopeSelection(): Promise<void> {
+  private async renderScopeSelection(checkForNew = false): Promise<void> {
     const root = this.contentEl;
     this.memoEditor = null;
 
@@ -252,13 +258,7 @@ export class QuizView extends ItemView {
       if (refresh.disabled) return;
       refresh.disabled = true;
       try {
-        const questions = await this.questionService.getQuestions();
-        if (this.closing || this.session || !root.contains(heading)) return;
-        this.allQuestions = questions;
-        await this.renderScopeSelection();
-      } catch (error) {
-        console.error("[Kokushi] Scope refresh error", error);
-        new Notice(t("出題範囲を更新できませんでした。"));
+        await this.reloadScopeQuestions(() => root.contains(heading));
       } finally {
         refresh.disabled = false;
       }
@@ -283,6 +283,7 @@ export class QuizView extends ItemView {
 
     if (this.closing || this.session || !root.contains(heading)) return;
     loading.remove();
+    if (checkForNew) this.onQuestionsLoaded?.(this.allQuestions);
 
     // ========================================
     // 利用可能な出典
@@ -306,7 +307,7 @@ export class QuizView extends ItemView {
     const validSubjects = new Set([...subjects, UNCLASSIFIED]);
     if (!subjects.length) this.quizScope.subjects = null;
     else if (this.quizScope.subjects !== null) {
-      this.quizScope.subjects = this.quizScope.subjects.filter(subject => validSubjects.has(subject));
+      this.quizScope.subjects = normalizeSubjectSelection(this.quizScope.subjects).filter(subject => validSubjects.has(subject));
     }
 
     const assignments = new Map<Question, readonly string[]>();
@@ -1706,7 +1707,7 @@ export class QuizView extends ItemView {
     if (this.ai?.subjects.length) {
       const fields = this.ai.subjectsOf(question);
       summary.createEl("p", {
-        text: t("（分野：{0}）", fields.length ? fields.join(locale() === "ja" ? "／" : " / ") : t("未分類")),
+        text: t("（分野：{0}）", fields.length ? fields.map(subjectLabel).join(locale() === "ja" ? "／" : " / ") : t("未分類")),
         cls: "kokushi-result-subjects",
       });
     }
@@ -2303,12 +2304,30 @@ export class QuizView extends ItemView {
     }
   }
 
+  public async refreshScopeQuestions(): Promise<void> {
+    if (this.session || this.closing || !this.contentEl.classList.contains("kokushi-scope")) return;
+    this.scopeRefresh ??= this.reloadScopeQuestions().finally(() => { this.scopeRefresh = undefined; });
+    await this.scopeRefresh;
+  }
+
   public async openScopeFromDashboard(): Promise<void> {
     if (!await this.leaveSession()) return;
     this.questions = [];
     this.resetSession();
     this.quizScope.targets = [...DEFAULT_PRACTICE_TARGETS];
-    await this.renderScopeSelection();
+    await this.reloadScopeQuestions();
+  }
+
+  private async reloadScopeQuestions(isCurrent = (): boolean => true): Promise<void> {
+    try {
+      const questions = await this.questionService.getQuestions();
+      if (this.session || this.closing || !isCurrent()) return;
+      this.allQuestions = questions;
+      await this.renderScopeSelection(true);
+    } catch (error) {
+      console.error("[Kokushi] Scope refresh error", error);
+      new Notice(t("出題範囲を更新できませんでした。"));
+    }
   }
 
   // ========================================

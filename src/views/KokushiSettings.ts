@@ -1,4 +1,4 @@
-import type { KokushiAI } from "../ai/KokushiAI";
+import type { AIControls } from "./AIControls";
 import { renderAISettings } from "./aiSettings";
 import { t } from "../i18n";
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFolder } from "obsidian";
@@ -10,19 +10,20 @@ import { openQuestionEditor } from "./QuestionEditor";
 import { bindAppearance, unbindAppearance, isValidPresetCount, KokushiPreferences } from "./KokushiAppearance";
 
 export class KokushiSettingTab extends PluginSettingTab {
+  private stopWatchingAI?: () => void;
   constructor(
     app: App,
     plugin: Plugin,
     private questions: QuestionService,
     private preferences: KokushiPreferences,
     private update: (change: Partial<KokushiPreferences>) => Promise<KokushiPreferences | null>,
-    private ai?: KokushiAI,
-    private refreshScopes: () => void = () => {},
+    private ai?: AIControls,
   ) {
     super(app, plugin);
   }
 
   display(): void {
+    this.hide();
     const root = this.containerEl;
     root.empty();
     new Setting(root).setName(t("表示言語")).setDesc(t("表示言語の変更はObsidianの再読み込み後に反映されます。")).addDropdown(dropdown => {
@@ -83,11 +84,16 @@ export class KokushiSettingTab extends PluginSettingTab {
       }
     }));
 
-    if (this.ai) renderAISettings(root, this.ai, this.questions, this.refreshScopes);
+    if (this.ai) this.stopWatchingAI = renderAISettings(root, this.ai);
 
     new Setting(root).setName(t("問題セットの書式チェック")).addButton(button => button
       .setButtonText(t("問題セットをチェック")).onClick(() => new QuestionCheckModal(this.app, this.questions).open()));
   }
+  hide(): void {
+    this.stopWatchingAI?.();
+    this.stopWatchingAI = undefined;
+  }
+
   private async setupFolders(): Promise<void> {
     const vault = this.app.vault;
     const missing = [PATHS.questions, PATHS.notes, DATA_FOLDER].filter(path => !(vault.getAbstractFileByPath(path) instanceof TFolder));

@@ -1137,6 +1137,10 @@ button.kokushi-view-results.mod-warning:hover:not(:disabled) {
   gap: 6px;
 }
 
+.kokushi-related-notes > li + li {
+  margin-block-start: 4px;
+}
+
 .kokushi-note-marker {
   display: inline-flex;
   justify-content: center;
@@ -1154,10 +1158,10 @@ button.kokushi-view-results.mod-warning:hover:not(:disabled) {
   display: none;
 }
 
-.kokushi-subject-editor {
-  width: 100%;
-  margin-block-end: 8px;
+.kokushi-ai-setting-status:not(:empty) {
+  margin-block-start: 6px;
 }
+
 
 .kokushi-drafts ul {
   list-style: none;
@@ -1166,4 +1170,22 @@ button.kokushi-view-results.mod-warning:hover:not(:disabled) {
 
 .kokushi-color-picker[hidden] {
   display: none;
+}
+
+
+/* Preserve touch targets when the mobile pane or dialog has little height. */
+.is-mobile :is(.kokushi-quiz, .kokushi-dashboard) {
+  min-block-size: 0;
+  overflow-y: auto;
+}
+
+.is-mobile :is(.kokushi-quiz, .kokushi-dashboard, .kokushi-source-modal, .kokushi-classification-modal,
+  .kokushi-attempt-preview, .kokushi-image-preview, .kokushi-note-create-row) button {
+  box-sizing: border-box;
+  min-block-size: 44px;
+  height: auto;
+}
+
+.is-mobile :is(.kokushi-quiz, .kokushi-dashboard, .kokushi-source-modal) > :is(button, .kokushi-source-modal-tools, .kokushi-source-modal-footer) {
+  flex-shrink: 0;
 }

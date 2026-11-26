@@ -22,6 +22,7 @@ import {
   StatisticsService,
 } from "./services/StatisticsService";
 
+import { AIControls } from "./views/AIControls";
 import { KokushiSettingTab } from "./views/KokushiSettings";
 import { installAppearance, readPreferences } from "./views/KokushiAppearance";
 
@@ -35,13 +36,16 @@ export default class KokushiPlugin extends Plugin {
     const ai = new KokushiAI(this.app);
     await ai.loadClassifications();
     this.register(() => ai.close());
-    const refreshScopes = (): void => {
+    const refreshScopes = (reloadQuestions = false): void => {
       for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_KOKUSHI)) {
         if (leaf.view instanceof QuizView) {
-          void leaf.view.refreshPreset().catch((error: unknown) => { console.error("[Kokushi] Scope refresh error", error); });
+          const task = reloadQuestions ? leaf.view.refreshScopeQuestions() : leaf.view.refreshPreset();
+          void task.catch((error: unknown) => { console.error("[Kokushi] Scope refresh error", error); });
         }
       }
     };
+    const aiControls = new AIControls(this.app, ai, questionService, () => refreshScopes(true));
+    this.register(() => aiControls.close());
     const appearance = installAppearance(this.app, preferences);
     this.register(() => appearance.clear());
     let pendingPreferences = Promise.resolve();
@@ -61,7 +65,7 @@ export default class KokushiPlugin extends Plugin {
         new Notice(t("設定を保存できませんでした。"));
         return null;
       });
-    }, ai, refreshScopes));
+    }, aiControls));
 
     const attemptService =
       new AttemptService(this.app);
@@ -95,7 +99,8 @@ export default class KokushiPlugin extends Plugin {
         sessionService,
         studyService,
         () => this.openDashboard(true),
-        ai
+        ai,
+        questions => aiControls.offerUpdate(questions)
       )
     );
 
@@ -180,7 +185,8 @@ export default class KokushiPlugin extends Plugin {
         async () => {
           const quiz = await getQuizView();
           await quiz.openScopeFromDashboard();
-        }
+        },
+        questions => aiControls.offerUpdate(questions)
       )
     );
 
@@ -234,5 +240,6 @@ export default class KokushiPlugin extends Plugin {
     }
 
     await workspace.revealLeaf(leaf);
+    if (existing.length && leaf.view instanceof QuizView) await leaf.view.refreshScopeQuestions();
   }
 }

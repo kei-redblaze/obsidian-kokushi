@@ -1,3 +1,4 @@
+import type { Question } from "../types";
 import { t } from "../i18n";
 import { bindAppearance, unbindAppearance } from "./KokushiAppearance";
 
@@ -37,7 +38,8 @@ export class DashboardView extends ItemView {
     private onRetrySession: (record: SessionRecord, mode: HistoryRetryMode) => Promise<boolean>,
     private onResumeSession: (id: string) => Promise<boolean>,
     private onShowActive: (id: string) => Promise<boolean>,
-    private onOpenScope: () => Promise<void>
+    private onOpenScope: () => Promise<void>,
+    private onQuestionsLoaded?: (questions: readonly Question[]) => void
   ) {
     super(leaf);
   }
@@ -95,7 +97,10 @@ export class DashboardView extends ItemView {
           questions.map(questionKey)
         );
 
-      if (version === this.renderVersion) this.renderDashboard(stats);
+      if (version === this.renderVersion) {
+        this.renderDashboard(stats);
+        this.onQuestionsLoaded?.(questions);
+      }
     } catch (error) {
       if (version !== this.renderVersion) return;
       console.error(

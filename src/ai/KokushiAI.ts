@@ -5,90 +5,111 @@ import { questionKey } from "../services/QuestionIdentity";
 import { ensureFolder } from "../services/VaultFolder";
 import { EmbeddingClient, EmbeddingModel } from "./EmbeddingClient";
 import { MODEL_REVISION } from "./model";
+import { dot, EMBEDDING_BATCH, SubjectClassifier } from "./SubjectClassifier";
+import { SUBJECT_IDS, SUBJECT_REVISION } from "./subjects";
 
 const CLASSIFICATIONS = `${DATA_FOLDER}/classifications.json`;
-const BATCH = 4;
-const EMPTY: Classifications = { schema: 1, model: MODEL_REVISION, subjects: [], questions: {} };
+const NOTE_THRESHOLD = 0.76;
+const EMPTY: Classifications = { schema: 2, model: MODEL_REVISION, definition: SUBJECT_REVISION, questions: {} };
 
 type Entry = { signature: string; subjects: string[] };
-type Classifications = { schema: 1; model: string; subjects: string[]; questions: Record<string, Entry> };
+type Classifications = { schema: 2; model: string; definition: string; questions: Record<string, Entry> };
 type NoteVector = { version: string; chunks: Float32Array[] };
 
 export class KokushiAI {
-  private classifications = EMPTY;
+  private classifications?: Classifications;
+  private outdated = false;
+  private classifier: SubjectClassifier;
   private notes = new Map<string, NoteVector>();
   private indexing?: Promise<void>;
   private running = false;
+  private closed = false;
   private revision = 0;
 
-  constructor(private app: App, private model: EmbeddingModel = new EmbeddingClient()) {}
+  constructor(private app: App, private model: EmbeddingModel = new EmbeddingClient()) {
+    this.classifier = new SubjectClassifier(model);
+  }
 
   get isReady(): boolean { return this.model.isReady; }
-  get subjects(): readonly string[] { return this.classifications.subjects; }
+  get subjects(): readonly string[] { return this.classifications ? SUBJECT_IDS : []; }
+  get needsReclassification(): boolean { return this.outdated; }
+
+  newQuestionKeys(questions: readonly Question[]): string[] {
+    const stored = this.classifications?.questions;
+    return questions.map(questionKey).filter(key => !stored?.[key]);
+  }
 
   prepare(progress: (completed: number, total: number) => void): Promise<void> {
     return this.model.prepare(progress);
   }
 
   close(): void {
+    this.closed = true;
     this.model.close();
+    this.classifier.clear();
     this.notes.clear();
   }
 
   async loadClassifications(): Promise<void> {
     const revision = this.revision;
     const file = this.app.vault.getAbstractFileByPath(CLASSIFICATIONS);
-    let result = EMPTY;
+    let result: Classifications | undefined;
     if (file instanceof TFile) {
       try {
-        result = parseClassifications(await this.app.vault.cachedRead(file));
+        result = parseClassifications(await this.app.vault.read(file));
       } catch (error) {
         console.warn("[Kokushi] Could not load classifications", error);
       }
     }
-    if (this.revision === revision) this.classifications = result;
+    if (!this.closed && this.revision === revision) {
+      this.classifications = result;
+      this.outdated = file instanceof TFile && !result;
+    }
   }
 
   subjectsOf(question: Question): readonly string[] {
-    const item = this.classifications.questions[questionKey(question)];
+    const item = this.classifications?.questions[questionKey(question)];
     return item?.signature === signature(question) ? item.subjects : [];
   }
 
   async classify(
-    questions: Question[],
-    subjects: string[],
+    questions: readonly Question[],
     progress: (completed: number, total: number) => void,
   ): Promise<void> {
-    if (this.running) throw new Error("Classification is running");
+    if (this.closed || this.running) throw new Error("Classification unavailable");
     this.running = true;
     try {
-      const entries: [string, Entry][] = [];
-      if (subjects.length && questions.length) {
-        const labels: Float32Array[] = [];
-        for (let start = 0; start < subjects.length; start += BATCH) {
-          labels.push(...await this.model.encode(subjects.slice(start, start + BATCH).map(label => `query: ${label}`)));
-        }
-        for (let start = 0; start < questions.length; start += BATCH) {
-          const batch = questions.slice(start, start + BATCH);
-          const vectors = await this.model.encode(batch.map(question => `passage: ${questionText(question)}`));
-          batch.forEach((question, i) => {
-            const vector = vectors[i];
-            if (!vector || labels.length !== subjects.length) throw new Error("Classification embeddings are incomplete");
-            const matches = rank(labels.map((label, index) => ({ id: subjects[index], score: dot(label, vector) })), 0.82, 0.022, subjects.length);
-            entries.push([questionKey(question), { signature: signature(question), subjects: matches }]);
-          });
-          progress(start + batch.length, questions.length);
-        }
+      const entries: Record<string, Entry> = {};
+      const changed = questions.flatMap(question => {
+        const key = questionKey(question);
+        const fingerprint = signature(question);
+        const existing = this.classifications?.questions[key];
+        if (existing?.signature !== fingerprint) return [{ question, key, fingerprint }];
+        entries[key] = existing;
+        return [];
+      });
+      progress(0, changed.length);
+      for (let start = 0; start < changed.length; start += EMBEDDING_BATCH) {
+        const batch = changed.slice(start, start + EMBEDDING_BATCH);
+        const results = await this.classifier.classify(batch.map(item => questionText(item.question)));
+        batch.forEach(({ key, fingerprint }, index) => {
+          entries[key] = { signature: fingerprint, subjects: results[index] };
+        });
+        progress(start + batch.length, changed.length);
       }
-      const next = { ...EMPTY, subjects: [...subjects], questions: Object.fromEntries(entries) };
+      if (!changed.length && this.classifications && Object.keys(entries).length === Object.keys(this.classifications.questions).length) return;
+
+      const next = { ...EMPTY, questions: entries };
       const content = JSON.stringify(next, null, 2) + "\n";
       await ensureFolder(this.app.vault, DATA_FOLDER);
+      if (this.closed) return;
       const file = this.app.vault.getAbstractFileByPath(CLASSIFICATIONS);
       if (file instanceof TFile) await this.app.vault.process(file, () => content);
       else if (!file) await this.app.vault.create(CLASSIFICATIONS, content);
       else throw new Error("Classification location is not a file");
       this.revision++;
       this.classifications = next;
+      this.outdated = false;
     } finally {
       this.running = false;
     }
@@ -105,7 +126,8 @@ export class KokushiAI {
       if (excluded.has(id) || !note.chunks.length) return [];
       return [{ id, score: Math.max(...note.chunks.map(chunk => dot(chunk, query))) }];
     });
-    return rank(scores, 0.76, 0.05, 5);
+    return scores.filter(({ score }) => score >= NOTE_THRESHOLD)
+      .sort((a, b) => b.score - a.score).map(({ id }) => id);
   }
 
   private async indexNotes(): Promise<void> {
@@ -126,8 +148,8 @@ export class KokushiAI {
       const text = plain(await this.app.vault.cachedRead(file));
       const chunks = text.match(/.{1,350}/gu) ?? [""];
       const vectors: Float32Array[] = [];
-      for (let start = 0; start < chunks.length; start += BATCH) {
-        vectors.push(...await this.model.encode(chunks.slice(start, start + BATCH).map(chunk =>
+      for (let start = 0; start < chunks.length; start += EMBEDDING_BATCH) {
+        vectors.push(...await this.model.encode(chunks.slice(start, start + EMBEDDING_BATCH).map(chunk =>
           `passage: ${file.basename} ${chunk}`)));
       }
       this.notes.set(file.path, { version, chunks: vectors });
@@ -135,28 +157,27 @@ export class KokushiAI {
   }
 }
 
-function parseClassifications(raw: string): Classifications {
+function parseClassifications(raw: string): Classifications | undefined {
   const value: unknown = JSON.parse(raw);
-  if (!value || typeof value !== "object" || !("schema" in value) || value.schema !== 1 ||
-      !("model" in value) || value.model !== MODEL_REVISION || !("subjects" in value) ||
-      !Array.isArray(value.subjects) || !value.subjects.every(item => typeof item === "string" && item.length > 0) ||
-      !("questions" in value) || typeof value.questions !== "object" || !value.questions || Array.isArray(value.questions)) {
-    throw new Error("Invalid classification data");
-  }
-  const subjects: string[] = [...new Set<string>(value.subjects)];
-  const allowed = new Set(subjects);
-  // Keys are serialized [source, id] tuples. Store only validated rows.
+  if (!value || typeof value !== "object" || !("schema" in value) || value.schema !== EMPTY.schema ||
+      !("model" in value) || value.model !== MODEL_REVISION ||
+      !("definition" in value) || value.definition !== SUBJECT_REVISION ||
+      !("questions" in value) || typeof value.questions !== "object" || !value.questions || Array.isArray(value.questions)) return;
+  const allowed = new Set(SUBJECT_IDS);
   const entries = Object.entries(value.questions).flatMap(([key, entry]: [string, unknown]): [string, Entry][] => {
     if (!key.startsWith("[") || !entry || typeof entry !== "object" || !("signature" in entry) || typeof entry.signature !== "string" ||
         !("subjects" in entry) || !Array.isArray(entry.subjects)) return [];
-    return [[key, { signature: entry.signature, subjects: entry.subjects.filter((s: unknown): s is string => typeof s === "string" && allowed.has(s)) }]];
+    return [[key, { signature: entry.signature, subjects: [...new Set(
+      entry.subjects.filter((id: unknown): id is string => typeof id === "string" && allowed.has(id))
+    )].slice(0, 2) }]];
   });
-  return { ...EMPTY, subjects, questions: Object.fromEntries(entries) };
+  return { ...EMPTY, questions: Object.fromEntries(entries) };
 }
 
 function signature(question: Question): string {
   let hash = 2166136261;
-  for (const character of questionText(question)) {
+  const content = JSON.stringify([question.stem, question.options.map(({ id, markdown }) => [id, markdown]), question.answer]);
+  for (const character of content) {
     hash ^= character.codePointAt(0) ?? 0;
     hash = Math.imul(hash, 16777619);
   }
@@ -172,16 +193,4 @@ function questionText(question: Question): string {
 
 function plain(text: string): string {
   return text.replace(/!\[\[[^\]]+\]\]|!\[[^\]]*\]\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function dot(a: Float32Array, b: Float32Array): number {
-  let score = 0;
-  for (let i = 0; i < a.length; i++) score += (a[i] ?? 0) * (b[i] ?? 0);
-  return score;
-}
-
-function rank(scores: { id: string; score: number }[], threshold: number, margin: number, max: number): string[] {
-  scores.sort((a, b) => b.score - a.score);
-  const best = scores[0]?.score ?? 0;
-  return scores.filter(item => item.score >= threshold && item.score >= best - margin).slice(0, max).map(item => item.id);
 }
