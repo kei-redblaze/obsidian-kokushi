@@ -61,6 +61,7 @@ export interface SessionRecord {
   sourceSessionId?: string;
   scope: {
     sources: string[] | null;
+    subjects?: string[] | null;
     order: "sequential" | "random";
     targets: PracticeTarget[];
   };

@@ -67,6 +67,23 @@ export class QuestionStudyService {
     return this.load(question);
   }
 
+  async updateRelatedNotes(question: QuestionReference, add: readonly string[], remove: readonly string[]): Promise<QuestionStudy> {
+    const removed = new Set(remove);
+    await this.updateStudy(question, add.length > 0, doc => {
+      const links = noteLinks(doc);
+      const existing = links.map(link => link.value);
+      const updated = new Set(existing.filter(path => !removed.has(path)));
+      for (const path of add) {
+        if (!updated.has(path) && !this.getNote(path)) throw new Error(t("関連付けられるノートが見つかりません"));
+        updated.add(path);
+      }
+      if (existing.length === updated.size && existing.every(path => updated.has(path))) return false;
+      doc.set("relatedNotes", doc.createNode([...updated]));
+      return true;
+    });
+    return this.load(question);
+  }
+
   getNotes(): TFile[] {
     return this.app.vault.getMarkdownFiles().filter(file => isNotePath(file.path));
   }

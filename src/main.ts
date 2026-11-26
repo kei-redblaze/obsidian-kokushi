@@ -1,5 +1,6 @@
 
 import { Notice, Plugin } from "obsidian";
+import { KokushiAI } from "./ai/KokushiAI";
 import { setLanguagePreference, t } from "./i18n";
 
 import {
@@ -31,6 +32,16 @@ export default class KokushiPlugin extends Plugin {
 
     let preferences = readPreferences(await this.loadData());
     setLanguagePreference(preferences.language);
+    const ai = new KokushiAI(this.app);
+    await ai.loadClassifications();
+    this.register(() => ai.close());
+    const refreshScopes = (): void => {
+      for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_KOKUSHI)) {
+        if (leaf.view instanceof QuizView) {
+          void leaf.view.refreshPreset().catch((error: unknown) => { console.error("[Kokushi] Scope refresh error", error); });
+        }
+      }
+    };
     const appearance = installAppearance(this.app, preferences);
     this.register(() => appearance.clear());
     let pendingPreferences = Promise.resolve();
@@ -41,13 +52,7 @@ export default class KokushiPlugin extends Plugin {
         const presetChanged = preferences.presetCount !== next.presetCount;
         preferences = next;
         appearance.update(next);
-        if (presetChanged) {
-          for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_KOKUSHI)) {
-            if (leaf.view instanceof QuizView) {
-              void leaf.view.refreshPreset().catch((error: unknown) => { console.error("[Kokushi] Preset refresh error", error); });
-            }
-          }
-        }
+        if (presetChanged) refreshScopes();
         return next;
       });
       pendingPreferences = task.then(() => {}, () => {});
@@ -56,7 +61,7 @@ export default class KokushiPlugin extends Plugin {
         new Notice(t("設定を保存できませんでした。"));
         return null;
       });
-    }));
+    }, ai, refreshScopes));
 
     const attemptService =
       new AttemptService(this.app);
@@ -89,7 +94,8 @@ export default class KokushiPlugin extends Plugin {
         attemptService,
         sessionService,
         studyService,
-        () => this.openDashboard(true)
+        () => this.openDashboard(true),
+        ai
       )
     );
 

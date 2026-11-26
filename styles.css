@@ -191,12 +191,18 @@ If your plugin does not need CSS, delete this file.
 }
 
 .kokushi-result-heading > .kokushi-result-grade,
-.kokushi-result-heading > .kokushi-result-answer {
+.kokushi-result-heading > .kokushi-result-subjects {
   margin: 0;
 }
 
-.kokushi-result-answer {
+.kokushi-result-subjects {
   text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.kokushi-result-answer {
+  margin: 6px 0 0;
+  text-align: left;
   overflow-wrap: anywhere;
 }
 
@@ -887,17 +893,18 @@ If your plugin does not need CSS, delete this file.
   flex-shrink: 0;
 }
 
-.kokushi-history-actions .mod-warning,
-.kokushi-session-actions .mod-warning,
-.kokushi-view-results.mod-warning {
-  background-color: var(--background-modifier-error);
-  color: var(--text-on-accent);
+.kokushi-history-actions button.mod-warning,
+.kokushi-session-actions button.mod-warning,
+button.kokushi-view-results.mod-warning {
+  background-color: #ad2436;
+  color: #fff;
 }
 
-.kokushi-history-actions .mod-warning:hover:not(:disabled),
-.kokushi-session-actions .mod-warning:hover:not(:disabled),
-.kokushi-view-results.mod-warning:hover:not(:disabled) {
-  background-color: var(--background-modifier-error-hover, var(--background-modifier-error));
+.kokushi-history-actions button.mod-warning:hover:not(:disabled),
+.kokushi-session-actions button.mod-warning:hover:not(:disabled),
+button.kokushi-view-results.mod-warning:hover:not(:disabled) {
+  background-color: #84192a;
+  color: #fff;
 }
 
 .kokushi-note-modal-container.modal-container {
@@ -1069,30 +1076,87 @@ If your plugin does not need CSS, delete this file.
   background-color: color-mix(in srgb, var(--kokushi-accent) 94%, var(--kokushi-accent-text));
 }
 
+.kokushi-scope-settings {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
+  gap: 10px 12px;
+}
+
 .kokushi-scope-inline {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
+  display: contents;
 }
 
 .kokushi-scope-inline > h3 {
-  flex: 0 0 auto;
   margin: 0;
+  padding-block: 5px;
 }
 
 .kokushi-scope-inline > .kokushi-scope-buttons {
-  flex: 1 1 auto;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   min-width: 0;
-  overflow-x: auto;
   margin: 0;
-  padding: 3px;
 }
 
 .kokushi-scope-inline .kokushi-scope-button {
-  flex: 0 0 auto;
-  white-space: nowrap;
+  flex: 0 1 auto;
+  max-width: 100%;
+  height: auto;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.kokushi-scope-settings > .kokushi-custom-count {
+  grid-column: 2;
+}
+
+.kokushi-subject-filter .kokushi-source-summary {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+.kokushi-source-modal-list.kokushi-scope-buttons {
+  align-content: flex-start;
+  padding: 3px;
+}
+
+.kokushi-source-modal-list.kokushi-scope-buttons > button {
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.kokushi-related-notes {
+  list-style: none;
+  padding-inline-start: 0;
+}
+
+.kokushi-related-notes > li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.kokushi-note-marker {
+  display: inline-flex;
+  justify-content: center;
+  width: 1.25rem;
+  flex: 0 0 1.25rem;
+  color: var(--text-muted);
+}
+
+.kokushi-note-marker svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.kokushi-study-ai-status:empty {
+  display: none;
+}
+
+.kokushi-subject-editor {
+  width: 100%;
+  margin-block-end: 8px;
 }
 
 .kokushi-drafts ul {

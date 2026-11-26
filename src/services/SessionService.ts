@@ -256,6 +256,8 @@ function isSessionRecord(value: unknown, id: string): value is SessionRecord {
     )) ||
     typeof scope !== "object" || scope === null ||
     (scope.sources !== null && (!Array.isArray(scope.sources) || !scope.sources.every(source => typeof source === "string"))) ||
+    (scope.subjects !== undefined && scope.subjects !== null &&
+      (!Array.isArray(scope.subjects) || !scope.subjects.every(subject => typeof subject === "string"))) ||
     (scope.order !== "sequential" && scope.order !== "random") ||
     (!Array.isArray(scope.targets) ||
       scope.targets.length < 1 || scope.targets.length > ALL_PRACTICE_TARGETS.length ||

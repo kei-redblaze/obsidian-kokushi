@@ -1,3 +1,5 @@
+import type { KokushiAI } from "../ai/KokushiAI";
+import { renderAISettings } from "./aiSettings";
 import { t } from "../i18n";
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFolder } from "obsidian";
 import { QuestionIssue, QuestionService } from "../services/QuestionService";
@@ -14,6 +16,8 @@ export class KokushiSettingTab extends PluginSettingTab {
     private questions: QuestionService,
     private preferences: KokushiPreferences,
     private update: (change: Partial<KokushiPreferences>) => Promise<KokushiPreferences | null>,
+    private ai?: KokushiAI,
+    private refreshScopes: () => void = () => {},
   ) {
     super(app, plugin);
   }
@@ -78,6 +82,8 @@ export class KokushiSettingTab extends PluginSettingTab {
         button.setDisabled(false);
       }
     }));
+
+    if (this.ai) renderAISettings(root, this.ai, this.questions, this.refreshScopes);
 
     new Setting(root).setName(t("問題セットの書式チェック")).addButton(button => button
       .setButtonText(t("問題セットをチェック")).onClick(() => new QuestionCheckModal(this.app, this.questions).open()));

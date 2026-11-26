@@ -1,3 +1,6 @@
+import type { KokushiAI } from "../ai/KokushiAI";
+import { matchesSubjects, UNCLASSIFIED } from "../ai/subjects";
+import { SubjectSelectionModal, subjectLabel } from "./SubjectSelectionModal";
 import { locale, t } from "../i18n";
 import { bindAppearance, getPresetCount, unbindAppearance } from "./KokushiAppearance";
 
@@ -49,6 +52,7 @@ type CountMode = "all" | "preset" | "custom";
 
 type QuizScope = {
   sources: string[] | null;
+  subjects: string[] | null;
   order: OrderMode;
   targets: PracticeTarget[];
   countMode: CountMode;
@@ -112,6 +116,7 @@ export class QuizView extends ItemView {
 
   private quizScope: QuizScope = {
     sources: null,
+    subjects: null,
     order: "sequential",
     targets: [...DEFAULT_PRACTICE_TARGETS],
     countMode: "all",
@@ -124,7 +129,8 @@ export class QuizView extends ItemView {
     private attemptService: AttemptService,
     private sessionService: SessionService,
     private studyService: QuestionStudyService,
-    private openDashboard: () => Promise<void>
+    private openDashboard: () => Promise<void>,
+    private ai?: KokushiAI
   ) {
     super(leaf);
   }
@@ -201,6 +207,7 @@ export class QuizView extends ItemView {
       if (this.closing) return;
 
       this.allQuestions = questions;
+      this.quizScope.targets = [...DEFAULT_PRACTICE_TARGETS];
       this.questions = [];
       this.resetSession();
 
@@ -265,7 +272,8 @@ export class QuizView extends ItemView {
     let ratings: Map<string, PracticeTarget>;
 
     try {
-      ratings = latestAttemptRatings(await this.attemptService.getAttempts());
+      const [attempts] = await Promise.all([this.attemptService.getAttempts(), this.ai?.loadClassifications()]);
+      ratings = latestAttemptRatings(attempts);
     } catch (error) {
       console.error("[Kokushi] History load error", error);
       loading.setText(t("解答履歴を読み込めませんでした。"));
@@ -294,9 +302,28 @@ export class QuizView extends ItemView {
     // 出題対象の絞り込み
     // ========================================
 
-    const getFilteredUnits = (): Question[][] => questionUnits(this.allQuestions).filter(unit => unit.some(question =>
+    const subjects = this.ai?.subjects ?? [];
+    const validSubjects = new Set([...subjects, UNCLASSIFIED]);
+    if (!subjects.length) this.quizScope.subjects = null;
+    else if (this.quizScope.subjects !== null) {
+      this.quizScope.subjects = this.quizScope.subjects.filter(subject => validSubjects.has(subject));
+    }
+
+    const assignments = new Map<Question, readonly string[]>();
+    const matchesSubjectFilter = (question: Question): boolean => {
+      if (this.quizScope.subjects === null) return true;
+      let assigned = assignments.get(question);
+      if (!assigned) {
+        assigned = this.ai?.subjectsOf(question) ?? [];
+        assignments.set(question, assigned);
+      }
+      return matchesSubjects(assigned, this.quizScope.subjects);
+    };
+    const units = questionUnits(this.allQuestions);
+    const getFilteredUnits = (): Question[][] => units.filter(unit => unit.some(question =>
       (this.quizScope.sources === null || this.quizScope.sources.includes(question.source)) &&
-      this.quizScope.targets.includes(ratings.get(questionKey(question)) ?? "unanswered")
+      this.quizScope.targets.includes(ratings.get(questionKey(question)) ?? "unanswered") &&
+      matchesSubjectFilter(question)
     ));
 
     // ========================================
@@ -333,8 +360,7 @@ export class QuizView extends ItemView {
     // UI共通処理
     // ========================================
 
-    const createGroup = (title: string): { group: HTMLElement; row: HTMLElement } => {
-      const group = root.createDiv({ cls: "kokushi-scope-group" });
+    const createGroup = (group: HTMLElement, title: string): { group: HTMLElement; row: HTMLElement } => {
       const heading = group.createDiv({ cls: "kokushi-scope-inline" });
       heading.createEl("h3", { text: title });
       const row = heading.createDiv({ cls: "kokushi-scope-buttons", attr: { role: "group", "aria-label": title } });
@@ -537,12 +563,35 @@ export class QuizView extends ItemView {
       apply(this.quizScope.sources);
     }
 
+    if (subjects.length) {
+      const subjectBlock = root.createDiv({ cls: "kokushi-scope-group kokushi-subject-filter" });
+      const subjectHeading = subjectBlock.createDiv({ cls: "kokushi-section-heading" });
+      subjectHeading.createEl("h3", { text: t("分野") });
+      const choose = subjectHeading.createEl("button", { type: "button", text: t("選択") });
+      const summary = subjectBlock.createDiv({ cls: "kokushi-source-summary" });
+      const sync = (): void => {
+        const selected = this.quizScope.subjects;
+        const separator = locale() === "ja" ? "、" : ", ";
+        summary.setText(selected === null ? t("すべての分野")
+          : selected.length ? selected.map(subjectLabel).join(separator) : t("分野が選択されていません"));
+      };
+      choose.onclick = () => new SubjectSelectionModal(this.app, subjects, this.quizScope.subjects, selected => {
+        if (!root.contains(heading) || refresh.disabled) return;
+        this.quizScope.subjects = selected;
+        sync();
+        updateCount();
+      }).open();
+      sync();
+    }
+
+    const settingsBlock = root.createDiv({ cls: "kokushi-scope-group kokushi-scope-settings" });
+
     // ========================================
     // 出題順序
     // ========================================
 
     createButtons(
-      createGroup(t("順序")).row,
+      createGroup(settingsBlock, t("順序")).row,
       [
         {
           value: "sequential",
@@ -566,7 +615,7 @@ export class QuizView extends ItemView {
     // 出題対象
     // ========================================
 
-    const targetGroup = createGroup(t("評価")).row;
+    const targetGroup = createGroup(settingsBlock, t("評価")).row;
     for (const target of ALL_PRACTICE_TARGETS) {
       const button = targetGroup.createEl("button", {
         type: "button",
@@ -593,7 +642,7 @@ export class QuizView extends ItemView {
     // 出題問題数
     // ========================================
 
-    const countGroup = createGroup(t("出題数"));
+    const countGroup = createGroup(settingsBlock, t("出題数"));
 
     createButtons(
       countGroup.row,
@@ -718,7 +767,7 @@ export class QuizView extends ItemView {
     this.resetSession();
     if (this.questions.length === 0) return;
 
-    const { sources, order, targets } = this.quizScope;
+    const { sources, subjects, order, targets } = this.quizScope;
     const startedAt = new Date().toISOString();
     const suffix = Array.from(crypto.getRandomValues(new Uint32Array(2)))
       .map(value => value.toString(16).padStart(8, "0"))
@@ -727,7 +776,11 @@ export class QuizView extends ItemView {
     this.session = {
       id: `${startedAt.replace(/:/g, "-")}_${suffix}`,
       startedAt,
-      scope: { sources: sources === null ? null : [...sources], order, targets: [...targets] },
+      scope: {
+        sources: sources === null ? null : [...sources],
+        subjects: subjects === null ? null : [...subjects],
+        order, targets: [...targets],
+      },
       sourceSessionId,
     };
     this.sessionService.claimDraft(this.session.id, this.leaf);
@@ -887,7 +940,7 @@ export class QuizView extends ItemView {
       const { startedAt, scope, sourceSessionId } = record;
       this.session = { id, startedAt, scope, sourceSessionId };
       adopted = true;
-      this.quizScope = { ...this.quizScope, sources: scope.sources, order: scope.order, targets: [...scope.targets] };
+      this.quizScope = { ...this.quizScope, sources: scope.sources, subjects: scope.subjects ?? null, order: scope.order, targets: [...scope.targets] };
       this.allQuestions = allQuestions;
       this.questions = questions;
       record.questions.forEach((item, index) => {
@@ -1650,9 +1703,16 @@ export class QuizView extends ItemView {
       text: gradeLabel(this.graded),
       cls: `kokushi-result-grade is-${this.graded}`,
     });
+    if (this.ai?.subjects.length) {
+      const fields = this.ai.subjectsOf(question);
+      summary.createEl("p", {
+        text: t("（分野：{0}）", fields.length ? fields.join(locale() === "ja" ? "／" : " / ") : t("未分類")),
+        cls: "kokushi-result-subjects",
+      });
+    }
     const excluded = this.graded === "excluded" || question.excluded;
     if (!excluded) {
-      summary.createEl("p", {
+      resultEl.createEl("p", {
         text: t("正答：{0}", this.formatCorrectAnswer(question)),
         cls: "kokushi-result-answer",
       });
@@ -1683,7 +1743,7 @@ export class QuizView extends ItemView {
     this.renderRating(resultEl, question);
 
     const studyPanel = resultEl.createDiv({ cls: "kokushi-question-study" });
-    return renderQuestionStudy(studyPanel, this.app, question, this.studyService);
+    return renderQuestionStudy(studyPanel, this.app, question, this.studyService, this.ai);
   }
 
   private renderRating(root: HTMLElement, question: Question): void {
@@ -1962,7 +2022,7 @@ export class QuizView extends ItemView {
         });
 
       backButton.onclick = () => {
-        void this.renderScopeSelection();
+        void this.openScopeFromDashboard();
       };
 
       return;
@@ -2247,6 +2307,7 @@ export class QuizView extends ItemView {
     if (!await this.leaveSession()) return;
     this.questions = [];
     this.resetSession();
+    this.quizScope.targets = [...DEFAULT_PRACTICE_TARGETS];
     await this.renderScopeSelection();
   }
 
@@ -2302,6 +2363,7 @@ export class QuizView extends ItemView {
       this.questions = [...expanded].flat();
       this.quizScope = {
         sources: null,
+        subjects: null,
         order: "sequential",
         targets: mode === "all" ? [...ALL_PRACTICE_TARGETS] : ["wrong"],
         countMode: "all",

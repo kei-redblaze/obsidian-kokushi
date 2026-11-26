@@ -55,6 +55,8 @@ See [Usage](docs/usage.md#english) for practice, the dashboard, and linked notes
 - **Custom color** reveals an accent color picker when turned on.
 - **Initial setup** creates any missing folders among `01_Questions`, `02_Notes`, and `03_Data`.
 - **Check question sets** reports duplicate IDs, invalid headings or answers, and missing local images.
+- **On-device AI model** downloads the model from Hugging Face when you choose **Download model**. Local note suggestions and subject classification share this model. The initial download is about 135 MB. Questions and notes are processed on the device.
+- **Subject list** starts empty. Load the bundled English or Japanese list, edit the names if needed, then choose **Save and classify**.
 
 ### Vault Data
 
@@ -65,6 +67,7 @@ See [Usage](docs/usage.md#english) for practice, the dashboard, and linked notes
 | Attempts, grades, and self-ratings | `03_Data/Attempts/attempts.jsonl` |
 | Session progress and results | `03_Data/Attempts/sessions/` |
 | Question memos and note links | `03_Data/YAML/<source>/<question-id>.yaml` |
+| Applied subject list and classification results | `03_Data/classifications.json` |
 
 The study YAML is created when a memo or note link is first saved. Updating the answer key in `## Answer` affects future grading. History preserves the grade recorded for each attempt.
 
@@ -80,7 +83,7 @@ npm run lint
 
 `npm run dev` rebuilds the plugin as files change. To release, run `npm version <version> --no-git-tag-version` and update `master`. When the version in `manifest.json` is newer than the latest tag, GitHub Actions builds and publishes the three plugin files.
 
-[License](LICENSE)
+[License](LICENSE) · [Transformers.js](https://github.com/huggingface/transformers.js) · [ONNX Runtime](https://github.com/microsoft/onnxruntime) · [Embedding model](https://huggingface.co/Xenova/multilingual-e5-small)
 
 ## 日本語
 
@@ -139,6 +142,8 @@ a. 心電計
 - **カスタムカラー**をONにすると、アクセント色を指定できます。
 - **初期セットアップ**で、`01_Questions`、`02_Notes`、`03_Data` のうち存在しないフォルダーを作成します。
 - **問題セットをチェック**で、番号の重複、見出しや正答の書式、画像の参照先を確認できます。
+- **モデルを取得**を押すと、Hugging Faceから約135 MBのモデルを端末に取得します。関連ノート候補と分野分類は同じモデルを使い、問題文やノート本文の処理は端末内で行います。
+- **分野リスト**の初期状態は空欄です。日本語か英語のデフォルトを読み込み、必要に応じて編集して **保存して分類を更新** を押します。
 
 ### データの保存場所
 
@@ -149,6 +154,7 @@ a. 心電計
 | 選んだ解答・採点結果・本人の評価 | `03_Data/Attempts/attempts.jsonl` |
 | 出題順・演習の進行状況・採点結果 | `03_Data/Attempts/sessions/` |
 | 問題ごとのメモ・関連ノートへのリンク | `03_Data/YAML/<出典>/<問題番号>.yaml` |
+| 適用中の分野リストと分類結果 | `03_Data/classifications.json` |
 
 YAMLはメモや関連ノートを初めて保存したときに作成します。正答は問題Markdownの `## Answer` で管理します。正答を訂正すると次回の採点から反映され、過去の履歴には当時の採点結果が残ります。問題文や入力形式も変更した場合は、更新された問題を表示して解答をやり直せます。
 
@@ -168,4 +174,4 @@ npm run lint
 
 ### ライセンス
 
-[ライセンス条文](LICENSE)
+[ライセンス条文](LICENSE) · [Transformers.js](https://github.com/huggingface/transformers.js) · [ONNX Runtime](https://github.com/microsoft/onnxruntime) · [埋め込みモデル](https://huggingface.co/Xenova/multilingual-e5-small)

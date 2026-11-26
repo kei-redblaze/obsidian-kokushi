@@ -15,6 +15,10 @@ Open **Kokushi: Open practice** from the command palette.
 - For a sequential set, submit each answer to proceed. The answer keys appear after you submit the last question. **Back to practice scope** preserves an unfinished session. Select **Details → Resume** under **Unfinished sessions** to continue.
 - **End session** opens the results. **Practice this set again** uses all the same questions, while **Review missed questions** selects incorrect and ungraded items. A sequential set stays together.
 
+#### Practice by Subject
+
+After classifying questions in **Settings → Kokushi**, use **Subjects → Select** to choose one or more subjects. **All subjects** includes unclassified questions. A question matches if it belongs to any selected subject and satisfies the source and rating filters. A sequential set stays together. New or edited questions appear as **Unclassified** until you run classification again.
+
 ### Dashboard and History
 
 Open **Kokushi: Open dashboard** from the command palette. Use **Last 7 days**, **Last 30 days**, or **All time** to change the daily charts. The overview shows up to five records in each history section. Select **View all** to open the full list.
@@ -28,6 +32,8 @@ Accuracy uses the recorded grade. A submitted question marked **Excluded** count
 - Enter a multiline memo after grading. It saves automatically when typing stops or you leave the field.
 - In **Notes**, select **New** to create and link a note in `02_Notes/`. Use **Edit** to link an existing note or unlink it. The same note can be linked to several questions.
 - Links open in another pane or a phone tab. If you rename or move a note within `02_Notes/` in Obsidian, Kokushi updates its links.
+
+Related notes appear with a pin when linked and with a dot when suggested by the model. **Mark all** links the displayed suggestions. In **Edit**, change the checked items and choose **Done** to save, or **Cancel** to discard that edit. **Mark other notes** saves the current checks first, then opens the note picker.
 
 ## 日本語
 
@@ -43,6 +49,10 @@ Accuracy uses the recorded grade. A submitted question marked **Excluded** count
 - 問題画像をタップすると拡大表示します。拡大画面の **画像をコピー** で画像1枚をコピーできます。画像コピーの可否は端末環境に依存します。
 - 採点後の **編集** から、問題Markdownを別ペインで開きます。スマートフォンでは別タブで開きます。順次出題の連問では最後の小問の確定後に採点し、セット全体のMarkdownを開けるようになります。
 
+#### 分野別演習
+
+**設定 → Kokushi** で分野リストを保存して分類すると、出題範囲に **分野** が表示されます。**すべての分野** には未分類も含まれます。複数の分野を選ぶと、そのいずれかに該当し、出典・評価の条件も満たす問題が候補になります。条件に合う小問がある順次出題の連問はセットごと出題します。追加・編集した問題は、再分類するまで **未分類** として扱います。
+
 ### ダッシュボードと履歴
 
 コマンドパレットの **Kokushi: ダッシュボードを開く** で、学習進捗、正答率、日別推移、演習履歴、解答履歴を確認できます。日別学習推移は **直近7日・直近30日・全期間** のボタンで切り替えます。履歴は各5件まで表示し、6件以上ある場合は **すべて表示** で一覧を開けます。解答履歴から問題番号を押すと、その回の解答・採点結果・評価を閲覧できます。現在の問題文や正答は区別して表示します。履歴を開いても演習は始まりません。
@@ -56,3 +66,5 @@ Accuracy uses the recorded grade. A submitted question marked **Excluded** count
 - 採点後のメモ欄に複数行のメモを入力できます。入力が止まったときや欄を離れたときに自動保存されます。
 - 採点後の **ノート → 新規** で `02_Notes/` にノートを作成し、問題に関連付けます。**編集** から既存ノートの追加や関連付けの解除ができます。複数の問題に同じノートを関連付けられます。
 - 関連ノートはリンクから別ペインで開き、スマートフォンでは別タブで開きます。Obsidian 内で `02_Notes/` 配下のノートを改名・移動すると、関連付け先も更新されます。
+
+関連付け済みのノートはピン、AI候補はドットで表示します。**全てマーク** を押すと表示中の候補をまとめて関連付けます。**編集** ではチェックを変更して **決定** で保存でき、**キャンセル** で取り消せます。**その他のノートをマーク** はチェックを先に保存し、ノート選択画面を開きます。
