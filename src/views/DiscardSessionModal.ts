@@ -1,3 +1,4 @@
+import { bindAppearance, unbindAppearance } from "./KokushiAppearance";
 import { App, Modal } from "obsidian";
 
 export class DiscardSessionModal extends Modal {
@@ -10,6 +11,7 @@ export class DiscardSessionModal extends Modal {
   }
 
   onOpen(): void {
+    bindAppearance(this.app, this.modalEl);
     this.setTitle(this.title);
     const root = this.contentEl;
     const explanation = root.createEl("p", { text: "この演習の履歴を削除します。" });
@@ -42,6 +44,7 @@ export class DiscardSessionModal extends Modal {
   }
 
   onClose(): void {
+    unbindAppearance(this.app, this.modalEl);
     this.contentEl.empty();
   }
 }

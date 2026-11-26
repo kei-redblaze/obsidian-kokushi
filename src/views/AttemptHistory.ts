@@ -1,7 +1,6 @@
-import type { Attempt, QuestionReference } from "../types";
-import { questionKey } from "../services/QuestionIdentity";
+import type { Attempt } from "../types";
 import { attemptGrade, attemptRating, PRACTICE_TARGET_LABELS } from "../services/PracticeTargets";
-import { renderHistoryDate, renderHistoryGrade } from "./sessionFormatting";
+import { formatAttemptAnswer, renderHistoryDate, renderHistoryGrade } from "./sessionFormatting";
 
 export function renderInvalidAttempts(root: HTMLElement, invalidLines: number): void {
   if (invalidLines === 0) return;
@@ -14,8 +13,7 @@ export function renderInvalidAttempts(root: HTMLElement, invalidLines: number): 
 export function renderAttemptHistory(
   root: HTMLElement,
   attempts: Attempt[],
-  availableIds: Set<string>,
-  onOpenQuestion: (reference: QuestionReference) => Promise<void>,
+  onOpenQuestion: (attempt: Attempt) => void,
 ): void {
   if (attempts.length === 0) {
     root.createEl("p", { text: "解答履歴はまだありません。" });
@@ -32,17 +30,14 @@ export function renderAttemptHistory(
   for (const attempt of attempts) {
     const row = body.createEl("tr");
     row.createEl("td", { text: attempt.source });
-    const idCell = row.createEl("td");
-    if (availableIds.has(questionKey(attempt))) {
-      const button = idCell.createEl("button", { text: attempt.id, cls: "kokushi-dashboard-link" });
-      button.type = "button";
-      button.onclick = () => { void onOpenQuestion(attempt); };
-    } else {
-      idCell.setText(attempt.id);
-    }
+    const button = row.createEl("td").createEl("button", {
+      type: "button", text: attempt.id, cls: "kokushi-dashboard-link",
+      attr: { "aria-label": `${attempt.source} ${attempt.id} の解答を表示` },
+    });
+    button.onclick = () => onOpenQuestion(attempt);
 
     renderHistoryDate(row.createEl("td"), attempt.timestamp, "Asia/Tokyo");
-    row.createEl("td", { text: attempt.selected.join(", ") });
+    row.createEl("td", { text: formatAttemptAnswer(attempt) });
     row.createEl("td", { text: PRACTICE_TARGET_LABELS[attemptRating(attempt)] });
     renderHistoryGrade(row.createEl("td"), attemptGrade(attempt));
   }

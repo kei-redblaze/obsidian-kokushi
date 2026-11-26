@@ -32,7 +32,6 @@ export type DashboardStatistics = {
   daily: DailyStatistics[];
   recent: Attempt[];
   invalidLines: number;
-  availableIds: Set<string>;
 };
 
 function dateKey(date: Date): string {
@@ -205,7 +204,6 @@ export class StatisticsService {
       daily,
       recent: this.newestFirst(attempts).slice(0, DASHBOARD_HISTORY_LIMIT),
       invalidLines,
-      availableIds,
     };
   }
   async getAttemptHistory(): Promise<{ attempts: Attempt[]; invalidLines: number }> {

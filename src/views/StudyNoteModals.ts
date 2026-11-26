@@ -1,3 +1,4 @@
+import { bindAppearance, unbindAppearance } from "./KokushiAppearance";
 import { App, FuzzySuggestModal, Modal, Platform, TFile } from "obsidian";
 
 export class StudyNotePicker extends FuzzySuggestModal<TFile> {
@@ -33,10 +34,11 @@ export class CreateStudyNoteModal extends Modal {
   onOpen(): void {
     this.setTitle("新規ノート");
     const form = this.contentEl.createEl("form");
-    const label = form.createEl("label", { text: "ノート名", cls: "kokushi-study-field" });
-    const input = label.createEl("input", { type: "text" });
+    bindAppearance(this.app, this.modalEl);
+    const fields = form.createDiv({ cls: "kokushi-note-create-row" });
+    const input = fields.createEl("input", { type: "text", placeholder: "ノート名を入力", attr: { "aria-label": "ノート名" } });
     input.required = true;
-    const submit = form.createEl("button", { text: "作成", cls: "mod-cta", type: "submit" });
+    const submit = fields.createEl("button", { text: "作成", cls: "mod-cta", type: "submit" });
     const status = form.createDiv({ cls: "kokushi-study-error", attr: { role: "status" } });
     let created: TFile | null = null;
 
@@ -100,6 +102,7 @@ export class CreateStudyNoteModal extends Modal {
   }
 
   onClose(): void {
+    unbindAppearance(this.app, this.modalEl);
     this.stopFitting?.();
     this.stopFitting = null;
     this.contentEl.empty();

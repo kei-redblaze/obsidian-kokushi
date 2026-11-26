@@ -272,9 +272,9 @@ function isSessionRecord(value: unknown, id: string): value is SessionRecord {
 
 function isSessionAnswer(value: unknown): value is SessionRecord["questions"][number] {
   if (!isQuestionReference(value)) return false;
-  const { selected, grade, unknown } = value as Partial<SessionRecord["questions"][number]>;
+  const { selected, grade, unknown, confirmed } = value as Partial<SessionRecord["questions"][number]>;
   return Array.isArray(selected) && selected.every(item => typeof item === "string") &&
-    typeof unknown === "boolean" &&
+    typeof unknown === "boolean" && (confirmed === undefined || typeof confirmed === "boolean") &&
     (grade === null || grade === "correct" || grade === "incorrect" || grade === "excluded");
 }
 

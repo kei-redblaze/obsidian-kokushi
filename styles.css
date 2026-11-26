@@ -982,3 +982,89 @@ If your plugin does not need CSS, delete this file.
 .kokushi-annotation h4 {
   margin: 0 0 6px;
 }
+
+.kokushi-note-create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.kokushi-note-create-row input {
+  min-width: 0;
+  width: 100%;
+}
+
+.kokushi-note-create-row input::placeholder {
+  color: var(--text-muted);
+  opacity: .8;
+}
+
+.kokushi-previewable-image {
+  cursor: zoom-in;
+}
+
+.kokushi-image-preview {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+.kokushi-image-preview > img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 69dvh;
+  object-fit: contain;
+}
+
+.kokushi-attempt-preview,
+.kokushi-question-check {
+  max-height: 70dvh;
+  overflow: auto;
+}
+
+.kokushi-preview-summary {
+  padding: 12px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+}
+
+.kokushi-preview-summary p {
+  margin-bottom: 0;
+}
+
+.kokushi-preview-options {
+  margin-block: 12px;
+}
+
+.kokushi-preview-options > div {
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.kokushi-preview-options > div.is-selected {
+  background: var(--background-modifier-hover);
+  font-weight: 600;
+}
+
+.kokushi-preview-options p {
+  margin: 0;
+}
+
+.kokushi-custom-accent {
+  --interactive-accent: var(--kokushi-accent);
+  --interactive-accent-hover: var(--kokushi-accent);
+  --text-on-accent: var(--kokushi-accent-text);
+}
+
+.kokushi-custom-accent button.mod-cta:not(:disabled) {
+  background-color: var(--kokushi-accent);
+  color: var(--kokushi-accent-text);
+}
+
+.kokushi-custom-accent button.mod-cta:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--kokushi-accent) 94%, var(--kokushi-accent-text));
+}

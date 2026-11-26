@@ -47,6 +47,43 @@ export class AttemptService {
     return task;
   }
 
+  async saveSequence(attempts: Attempt[]): Promise<Attempt[]> {
+    const task = this.queue.then(async () => {
+      const lines = attempts.map(attempt => JSON.stringify(attempt)).join("\n") + "\n";
+      const file = this.app.vault.getAbstractFileByPath(PATHS.attempts);
+      if (!file) {
+        await ensureFolder(this.app.vault, ATTEMPTS_FOLDER);
+        await this.app.vault.create(PATHS.attempts, lines);
+        return attempts;
+      }
+      if (!(file instanceof TFile)) throw new Error("履歴保存先がファイルではありません");
+      let saved = attempts;
+      const sessionId = attempts[0]?.sessionId;
+      const keys = new Set(attempts.map(questionKey));
+      await this.app.vault.process(file, content => {
+        const existing = new Map<string, Attempt>();
+        for (const line of content.split(/\r?\n/)) {
+          if (!line.trim()) continue;
+          try {
+            const value: unknown = JSON.parse(line);
+            if (isAttempt(value) && value.sessionId === sessionId && keys.has(questionKey(value))) {
+              existing.set(questionKey(value), value);
+            }
+          } catch {
+            // 不正な行はそのまま残す。
+          }
+        }
+        if (!existing.size) return content + (content && !content.endsWith("\n") ? "\n" : "") + lines;
+        if (existing.size !== attempts.length) throw new Error("連問の解答履歴が一部だけ保存されています");
+        saved = attempts.map(attempt => existing.get(questionKey(attempt)) ?? attempt);
+        return content;
+      });
+      return saved;
+    });
+    this.queue = task.then(() => {}, () => {});
+    return task;
+  }
+
   async updateRating(sessionId: string, question: QuestionReference, rating: PracticeTarget): Promise<void> {
     const task = this.queue.then(async () => {
       const file = this.app.vault.getAbstractFileByPath(PATHS.attempts);

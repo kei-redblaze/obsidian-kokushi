@@ -29,6 +29,7 @@ export interface Question extends QuestionReference {
   annotation: string;
   options: QuestionOption[];
   path: string;
+  sequence?: { index: number; ids: string[] };
 }
 
 export interface Attempt extends QuestionReference {
@@ -37,6 +38,7 @@ export interface Attempt extends QuestionReference {
   selected: string[];
   correct: boolean | null;
   rating?: PracticeTarget;
+  unknown?: boolean;
 }
 
 export interface SessionResult {
@@ -67,6 +69,7 @@ export interface SessionRecord {
     selected: string[];
     grade: GradeResult | null;
     unknown: boolean;
+    confirmed?: boolean;
   })[];
 }
 

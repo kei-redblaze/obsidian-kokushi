@@ -1,3 +1,4 @@
+import { bindAppearance, unbindAppearance } from "./KokushiAppearance";
 
 import {
   ItemView,
@@ -7,8 +8,9 @@ import {
 
 import { QuestionService } from "../services/QuestionService";
 import { SessionService } from "../services/SessionService";
-import { HistoryRetryMode, QuestionReference, SessionRecord } from "../types";
+import { HistoryRetryMode, SessionRecord } from "../types";
 import { renderSessionHistory } from "./SessionHistory";
+import { AttemptPreviewModal } from "./AttemptPreviewModal";
 import { renderAttemptHistory, renderInvalidAttempts } from "./AttemptHistory";
 import { questionKey } from "../services/QuestionIdentity";
 import { DASHBOARD_HISTORY_LIMIT } from "../constants";
@@ -31,9 +33,6 @@ export class DashboardView extends ItemView {
     private questionService: QuestionService,
     private statisticsService: StatisticsService,
     private sessionService: SessionService,
-    private onOpenQuestion: (
-      reference: QuestionReference
-    ) => Promise<void>,
     private onRetrySession: (record: SessionRecord, mode: HistoryRetryMode) => Promise<boolean>,
     private onResumeSession: (id: string) => Promise<boolean>,
     private onShowActive: (id: string) => Promise<boolean>,
@@ -55,6 +54,7 @@ export class DashboardView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
+    bindAppearance(this.app, this.containerEl ?? this.contentEl);
     this.registerEvent(this.app.workspace.on("active-leaf-change", leaf => {
       if (leaf !== this.leaf) return;
       if (this.page === "dashboard") {
@@ -67,6 +67,7 @@ export class DashboardView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    unbindAppearance(this.app, this.containerEl ?? this.contentEl);
     this.renderVersion++;
     this.contentEl.empty();
   }
@@ -310,7 +311,7 @@ export class DashboardView extends ItemView {
 
     const attemptSection = root.createDiv();
     attemptSection.createEl("h3", { text: "最近の解答履歴" });
-    renderAttemptHistory(attemptSection, stats.recent, stats.availableIds, this.onOpenQuestion);
+    renderAttemptHistory(attemptSection, stats.recent, attempt => new AttemptPreviewModal(this.app, attempt, this.questionService).open());
     if (stats.totalAttempts > DASHBOARD_HISTORY_LIMIT) {
       const more = attemptSection.createEl("button", {
         text: "すべて表示",
@@ -347,15 +348,12 @@ export class DashboardView extends ItemView {
 
     const status = content.createEl("p", { text: "解答履歴を読み込んでいます…" });
     try {
-      const [questions, history] = await Promise.all([
-        this.questionService.getQuestions(),
-        this.statisticsService.getAttemptHistory(),
-      ]);
+      const history = await this.statisticsService.getAttemptHistory();
       if (version !== this.renderVersion) return;
       status.remove();
       renderInvalidAttempts(content, history.invalidLines);
       renderAttemptHistory(
-        content, history.attempts, new Set(questions.map(questionKey)), this.onOpenQuestion,
+        content, history.attempts, attempt => new AttemptPreviewModal(this.app, attempt, this.questionService).open(),
       );
     } catch (error) {
       if (version !== this.renderVersion) return;
