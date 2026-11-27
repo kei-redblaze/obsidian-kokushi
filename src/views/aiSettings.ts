@@ -19,9 +19,19 @@ export function renderAISettings(
 
   const gpuSetting = new Setting(root).setName(t("WebGPUを使用する"))
     .setDesc(t("失敗時はCPU（WASM）に自動で切り替えます。"));
-  const gpu = new ToggleComponent(gpuSetting.controlEl).onChange(async enabled => {
-    await save({ useWebGPU: enabled });
-    sync();
+  const gpu = new ToggleComponent(gpuSetting.controlEl).setValue(preferences().useWebGPU);
+  let savingGPU = false;
+  let syncingGPU = false;
+  gpu.onChange(async enabled => {
+    if (syncingGPU || savingGPU || enabled === preferences().useWebGPU) return;
+    savingGPU = true;
+    gpu.setDisabled(true);
+    try {
+      await save({ useWebGPU: enabled });
+    } finally {
+      savingGPU = false;
+      sync();
+    }
   });
 
   const classification = new Setting(root)
@@ -74,7 +84,16 @@ export function renderAISettings(
     noteFallback.setText(!ready && settings.noteMode !== "keyword" ? fallback : "");
     download.setDisabled(busy);
     remove.setDisabled(busy);
-    gpu.setValue(settings.useWebGPU).setDisabled(busy);
+    gpu.setDisabled(busy || savingGPU);
+    // Backend status updates can arrive before the settings write completes.
+    if (!savingGPU && gpu.getValue() !== settings.useWebGPU) {
+      syncingGPU = true;
+      try {
+        gpu.setValue(settings.useWebGPU);
+      } finally {
+        syncingGPU = false;
+      }
+    }
     update.setDisabled(busy);
     classificationMode.setValue(settings.classificationMode).setDisabled(busy);
     noteMode.setValue(settings.noteMode);

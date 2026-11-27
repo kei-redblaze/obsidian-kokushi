@@ -86,7 +86,9 @@ export class KokushiSettingTab extends PluginSettingTab {
 
     if (this.ai) this.stopWatchingAI = renderAISettings(root, this.ai, () => this.preferences, async change => {
       const saved = await this.update(change);
-      if (saved) this.preferences = saved;
+      if (!saved) return;
+      this.preferences = saved;
+      this.ai?.preferencesChanged();
     });
 
     new Setting(root).setName(t("問題セットの書式チェック")).addButton(button => button

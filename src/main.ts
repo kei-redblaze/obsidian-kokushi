@@ -58,7 +58,6 @@ export default class KokushiPlugin extends Plugin {
         preferences = next;
         appearance.update(next);
         ai.configure(next);
-        aiControls.preferencesChanged();
         if (presetChanged) refreshScopes();
         return next;
       });
