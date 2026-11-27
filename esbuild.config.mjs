@@ -41,11 +41,11 @@ const worker = {
         plugins: [{
           name: 'kokushi-offline-runtime',
           setup(inner) {
-            inner.onResolve({ filter: /^onnxruntime-web$/ }, () => ({ path: join(ortDist, 'ort.wasm.min.mjs') }));
+            inner.onResolve({ filter: /^onnxruntime-web$/ }, () => ({ path: join(ortDist, 'ort.webgpu.min.mjs') }));
             inner.onResolve({ filter: /^kokushi:onnx-(module|wasm)$/ }, args => ({ path: args.path, namespace: 'kokushi-runtime' }));
             inner.onLoad({ filter: /.*/, namespace: 'kokushi-runtime' }, async args => {
               const binary = args.path.endsWith('wasm');
-              const file = join(ortDist, `ort-wasm-simd-threaded.${binary ? 'wasm' : 'mjs'}`);
+              const file = join(ortDist, `ort-wasm-simd-threaded.jsep.${binary ? 'wasm' : 'mjs'}`);
               return { contents: await readFile(file), loader: binary ? 'binary' : 'text' };
             });
           }

@@ -1,4 +1,5 @@
 import type { EmbeddingModel } from "./EmbeddingClient";
+import type { SearchHit } from "./BM25";
 import { SUBJECTS } from "./subjects";
 
 const TERMS_PER_PROFILE = 8;
@@ -15,7 +16,7 @@ export class SubjectClassifier {
 
   constructor(private model: EmbeddingModel) {}
 
-  async classify(texts: string[]): Promise<string[][]> {
+  async classify(texts: string[]): Promise<SearchHit[][]> {
     const profiles = this.profiles ??= await this.loadProfiles();
     const vectors = await this.model.encode(texts.map(text => `passage: ${text}`));
     if (vectors.length !== texts.length) throw new Error("Question embeddings are incomplete");
@@ -26,7 +27,7 @@ export class SubjectClassifier {
       if (!best || best.score < MIN_SUBJECT_SCORE) return [];
       const distinctSecond = second && (!third || second.score - third.score >= THIRD_SUBJECT_GAP);
       return distinctSecond && second.score >= MIN_SECOND_SUBJECT_SCORE && best.score - second.score <= SECOND_SUBJECT_MARGIN
-        ? [best.id, second.id] : [best.id];
+        ? [best, second] : [best];
     });
   }
 

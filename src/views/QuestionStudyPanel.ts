@@ -178,7 +178,7 @@ export async function renderQuestionStudy(
       if (paths.length && await apply(paths, [])) renderLinks();
     };
 
-    if (ai?.isReady) {
+    if (ai) {
       status.setText(t("関連ノートを検索しています…"));
       void ai.suggestNotes(question, []).then(paths => {
         if (!root.isConnected) return;

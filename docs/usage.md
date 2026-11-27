@@ -17,7 +17,7 @@ Open **Kokushi: Open practice** from the command palette.
 
 #### Practice by Subject
 
-After classifying questions in **Settings → Kokushi**, use **Subjects → Select** to choose one or more subjects. **All subjects** includes unclassified questions. A question matches if it belongs to any selected subject and satisfies the source and rating filters. A sequential set stays together. A question can receive up to two subjects. When there are new questions, Kokushi offers to classify them on the dashboard or practice scope. New or edited questions appear as **Unclassified** until classified.
+After classifying questions in **Settings → Kokushi**, use **Subjects → Select** to choose one or more subjects. **All subjects** includes unclassified questions. A question matches if it belongs to any selected subject and satisfies the source and rating filters. A sequential set stays together. A question can receive up to two subjects. Classification uses the final sentence of the stem, all choices in order, then the rest of the stem. When there are new questions, Kokushi offers to classify them on the dashboard or practice scope. New or edited questions appear as **Unclassified** until classified.
 
 ### Dashboard and History
 
@@ -33,7 +33,7 @@ Accuracy uses the recorded grade. A submitted question marked **Excluded** count
 - In **Notes**, select **New** to create and link a note in `02_Notes/`. Use **Edit** to link an existing note or unlink it. The same note can be linked to several questions.
 - Links open in another pane or a phone tab. If you rename or move a note within `02_Notes/` in Obsidian, Kokushi updates its links.
 
-Related notes appear with a pin when linked and with a dot when the local model finds a match at or above the relevance threshold. **Mark all** links the displayed suggestions. In **Edit**, change the checked items and choose **Done** to save, or **Cancel** to discard that edit. **Mark other notes** saves the current checks first, then opens the note picker.
+Linked notes appear with a pin. Keyword, vector, or hybrid suggestions appear below them with a dot. You can change the search method and the vector similarity threshold under **Settings → Kokushi**. **Mark all** links the displayed suggestions. In **Edit**, change the checked items and choose **Done** to save, or **Cancel** to discard that edit. **Mark other notes** saves the current checks first, then opens the note picker.
 
 ## 日本語
 
@@ -51,7 +51,7 @@ Related notes appear with a pin when linked and with a dot when the local model 
 
 #### 分野別演習
 
-**設定 → Kokushi → 分類を更新** で分類すると、出題範囲に **分野** が表示されます。**すべての分野** には未分類も含まれます。複数の分野を選ぶと、そのいずれかに該当し、出典・評価の条件も満たす問題が候補になります。条件に合う小問がある順次出題の連問はセットごと出題します。1問に最大2つの分野が付きます。追加された問題がある場合は、ダッシュボードまたは出題範囲選択画面で分類を案内します。追加・編集した問題は、分類されるまで **未分類** として扱います。
+**設定 → Kokushi → 分類を更新** で分類すると、出題範囲に **分野** が表示されます。**すべての分野** には未分類も含まれます。複数の分野を選ぶと、そのいずれかに該当し、出典・評価の条件も満たす問題が候補になります。条件に合う小問がある順次出題の連問はセットごと出題します。1問に最大2つの分野が付きます。分類には本文の最終文、全選択肢、本文の残りをこの順に使います。追加された問題がある場合は、ダッシュボードまたは出題範囲選択画面で分類を案内します。追加・編集した問題は、分類されるまで **未分類** として扱います。
 
 ### ダッシュボードと履歴
 
@@ -67,4 +67,4 @@ Related notes appear with a pin when linked and with a dot when the local model 
 - 採点後の **ノート → 新規** で `02_Notes/` にノートを作成し、問題に関連付けます。**編集** から既存ノートの追加や関連付けの解除ができます。複数の問題に同じノートを関連付けられます。
 - 関連ノートはリンクから別ペインで開き、スマートフォンでは別タブで開きます。Obsidian 内で `02_Notes/` 配下のノートを改名・移動すると、関連付け先も更新されます。
 
-関連付け済みのノートはピンで表示します。関連度が閾値以上のAI候補は、続けてドット付きで表示します。**全てマーク** を押すと表示中の候補をまとめて関連付けます。**編集** ではチェックを変更して **決定** で保存でき、**キャンセル** で取り消せます。**その他のノートをマーク** はチェックを先に保存し、ノート選択画面を開きます。
+関連付け済みのノートはピンで表示します。検索方式に応じた候補は、続けてドット付きで表示します。検索方式とベクトル候補の閾値は **設定 → Kokushi** で変更できます。**全てマーク** を押すと表示中の候補をまとめて関連付けます。**編集** ではチェックを変更して **決定** で保存でき、**キャンセル** で取り消せます。**その他のノートをマーク** はチェックを先に保存し、ノート選択画面を開きます。

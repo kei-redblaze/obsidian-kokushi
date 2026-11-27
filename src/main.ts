@@ -34,6 +34,7 @@ export default class KokushiPlugin extends Plugin {
     let preferences = readPreferences(await this.loadData());
     setLanguagePreference(preferences.language);
     const ai = new KokushiAI(this.app);
+    ai.configure(preferences);
     await ai.loadClassifications();
     this.register(() => ai.close());
     const refreshScopes = (reloadQuestions = false): void => {
@@ -56,6 +57,8 @@ export default class KokushiPlugin extends Plugin {
         const presetChanged = preferences.presetCount !== next.presetCount;
         preferences = next;
         appearance.update(next);
+        ai.configure(next);
+        aiControls.preferencesChanged();
         if (presetChanged) refreshScopes();
         return next;
       });

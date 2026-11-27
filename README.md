@@ -55,8 +55,8 @@ See [Usage](docs/usage.md#english) for practice, the dashboard, and linked notes
 - **Custom color** reveals an accent color picker when turned on.
 - **Initial setup** creates any missing folders among `01_Questions`, `02_Notes`, and `03_Data`.
 - **Check question sets** reports duplicate IDs, invalid headings or answers, and missing local images.
-- **On-device AI model** downloads the model from Hugging Face when you choose **Download model**. Local note suggestions and subject classification share this model. The initial download is about 135 MB. Questions and notes are processed on the device.
-- **Update classification** uses 27 built-in subjects and a [Japanese vocabulary](src/ai/subjects-ja.yaml) based on the Japanese Medical Licensing Examination content outline. It processes new and edited questions, and rebuilds the results when the bundled definitions change.
+- **On-device AI model** downloads about 135 MB from Hugging Face when you choose **Download model**. Vector and hybrid search share this model and process your text on the device. **Delete model** clears the cached model from the device. **Use WebGPU** is off by default. When enabled, failures fall back to CPU (WASM).
+- **Subject classification** and **Related note search** each offer keyword (BM25), vector, and hybrid modes. Keyword search is the default and works without a model. **Update classification** uses the [27 built-in subjects](src/ai/subjects-ja.yaml). It processes new and edited questions and rebuilds the results when the classification method or definitions change. The vector similarity threshold for related notes defaults to **0.90**.
 
 ### Vault Data
 
@@ -142,8 +142,8 @@ a. 心電計
 - **カスタムカラー**をONにすると、アクセント色を指定できます。
 - **初期セットアップ**で、`01_Questions`、`02_Notes`、`03_Data` のうち存在しないフォルダーを作成します。
 - **問題セットをチェック**で、番号の重複、見出しや正答の書式、画像の参照先を確認できます。
-- **モデルを取得**を押すと、Hugging Faceから約135 MBのモデルを端末に取得します。関連ノート候補と分野分類は同じモデルを使い、問題文やノート本文の処理は端末内で行います。
-- **分類を更新**は、医師国家試験出題基準をもとにした[内蔵の27分野](src/ai/subjects-ja.yaml)で追加・変更された問題を分類します。内蔵の定義が変わると全問を再分類します。
+- **モデルを取得**を押すと、ベクトル検索・ハイブリッドで使う約135 MBのモデルをHugging Faceから端末に取得します。問題とノートのテキストは端末内で処理します。**モデルを削除**で端末のモデルキャッシュを消去できます。**WebGPUを使用する**は初期OFFで、ONでも処理に失敗するとCPU（WASM）に切り替わります。
+- **分野の分類**と**関連ノート検索**では、キーワード（BM25）、ベクトル、ハイブリッドを個別に選択できます。初期設定のキーワード検索はモデルの取得なしで使えます。**分類を更新**は[内蔵の27分野](src/ai/subjects-ja.yaml)で追加・変更された問題を分類し、方式や定義が変わると全問を再分類します。関連ノートのベクトル候補の閾値は初期値 **0.90** です。
 
 ### データの保存場所
 

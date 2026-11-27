@@ -1,7 +1,8 @@
+import { readSearchPreferences, SearchPreferences } from "../ai/searchPreferences";
 import type { App } from "obsidian";
 import { LanguagePreference } from "../i18n";
 
-export interface KokushiPreferences {
+export interface KokushiPreferences extends SearchPreferences {
   customAccent: boolean;
   accent: string;
   presetCount: number;
@@ -15,6 +16,7 @@ const appearances = new WeakMap<App, KokushiAppearance>();
 export function readPreferences(value: unknown): KokushiPreferences {
   const data = value as Partial<KokushiPreferences> | null;
   return {
+    ...readSearchPreferences(data),
     presetCount: isValidPresetCount(data?.presetCount) ? data.presetCount : DEFAULT_PRESET_COUNT,
     language: data?.language === "ja" || data?.language === "en" ? data.language : "system",
     customAccent: data?.customAccent === true,

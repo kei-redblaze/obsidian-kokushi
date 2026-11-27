@@ -3,7 +3,7 @@ import runtimeSource from "kokushi:onnx-module";
 import runtimeBytes from "kokushi:onnx-wasm";
 import { MODEL, MODEL_FILES, MODEL_REVISION, MODEL_URL } from "./model";
 import { openModelCache } from "./ModelCache";
-import type { WorkerRequest, WorkerReply } from "./EmbeddingClient";
+import type { Backend, WorkerRequest, WorkerReply } from "./EmbeddingClient";
 
 const runtime = env.backends.onnx.wasm;
 if (!runtime) throw new Error("WebAssembly runtime unavailable");
@@ -20,8 +20,12 @@ env.useCustomCache = true;
 
 let extractor: FeatureExtractionPipeline | undefined;
 
-async function initialize(download: boolean, progress: (complete: number, total: number) => void): Promise<void> {
+async function initialize(download: boolean, backend: Backend, progress: (complete: number, total: number) => void): Promise<void> {
   if (extractor) return;
+  if (backend === "webgpu") {
+    const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+    if (!await gpu?.requestAdapter()) throw new Error("WebGPU adapter is unavailable");
+  }
   const cache = await openModelCache();
   for (const [index, file] of MODEL_FILES.entries()) {
     if (!await cache.read(file)) {
@@ -43,9 +47,20 @@ async function initialize(download: boolean, progress: (complete: number, total:
   };
   try {
     extractor = await pipeline<"feature-extraction">("feature-extraction", MODEL, {
-      revision: MODEL_REVISION, dtype: "q8", device: "wasm", local_files_only: true,
+      revision: MODEL_REVISION, dtype: "q8", device: backend, local_files_only: true,
     });
+    if (backend === "webgpu") {
+      const check = await extractor(["query: Kokushi"], { pooling: "mean", normalize: true });
+      try {
+        if (!(check.data as Float32Array).some(value => Number.isFinite(value) && value !== 0)) {
+          throw new Error("WebGPU trial inference failed");
+        }
+      } finally {
+        check.dispose();
+      }
+    }
   } finally {
+    cache.close();
     URL.revokeObjectURL(loader);
     URL.revokeObjectURL(binary);
   }
@@ -64,7 +79,7 @@ self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
   queue = queue.then(async () => {
     try {
       if (request.kind === "initialize") {
-        await initialize(request.download, (complete, total) => send({ progress: { complete, total } }));
+        await initialize(request.download, request.backend, (complete, total) => send({ progress: { complete, total } }));
         send({ vectors: [] });
       } else {
         if (!extractor) throw new Error("Model is not initialized");

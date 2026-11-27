@@ -84,7 +84,10 @@ export class KokushiSettingTab extends PluginSettingTab {
       }
     }));
 
-    if (this.ai) this.stopWatchingAI = renderAISettings(root, this.ai);
+    if (this.ai) this.stopWatchingAI = renderAISettings(root, this.ai, () => this.preferences, async change => {
+      const saved = await this.update(change);
+      if (saved) this.preferences = saved;
+    });
 
     new Setting(root).setName(t("問題セットの書式チェック")).addButton(button => button
       .setButtonText(t("問題セットをチェック")).onClick(() => new QuestionCheckModal(this.app, this.questions).open()));

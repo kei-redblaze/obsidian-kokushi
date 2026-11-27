@@ -10,6 +10,7 @@ export class AIControls {
   private prompt?: Modal;
   private closed = false;
   private rebuildingOffered = false;
+  private stopWatchingBackend: () => void;
   modelBusy = false;
   classificationBusy = false;
   modelStatus = "";
@@ -20,7 +21,16 @@ export class AIControls {
     private ai: KokushiAI,
     private questions: QuestionService,
     private onClassified: () => void,
-  ) {}
+  ) {
+    this.stopWatchingBackend = ai.onBackendChange(() => this.notify());
+  }
+
+  get backend() { return this.ai.backend; }
+
+  preferencesChanged(): void {
+    if (this.ai.needsReclassification) this.rebuildingOffered = false;
+    this.notify();
+  }
 
   get isReady(): boolean { return this.ai.isReady; }
 
@@ -32,6 +42,7 @@ export class AIControls {
 
   close(): void {
     this.closed = true;
+    this.stopWatchingBackend();
     this.listeners.clear();
     this.prompt?.close();
   }
@@ -47,6 +58,7 @@ export class AIControls {
         this.notify();
       });
       this.modelStatus = t("モデルは準備できています。");
+      this.rebuildingOffered = false;
     } catch (error) {
       console.error("[Kokushi] Model preparation failed", error);
       this.modelStatus = t("モデルを準備できませんでした。端末の空き容量と接続を確認してください。");
@@ -56,8 +68,31 @@ export class AIControls {
     }
   }
 
+  confirmRemoval(): void {
+    if (this.closed || this.modelBusy || this.classificationBusy) return;
+    new RemoveModelPrompt(this.app, () => { void this.remove(); }).open();
+  }
+
+  private async remove(): Promise<void> {
+    if (this.closed || this.modelBusy || this.classificationBusy) return;
+    this.modelBusy = true;
+    this.modelStatus = t("モデルを削除しています…");
+    this.notify();
+    try {
+      await this.ai.removeModel();
+      this.modelStatus = t("端末内モデルを削除しました。");
+      this.rebuildingOffered = false;
+    } catch (error) {
+      console.error("[Kokushi] Model removal failed", error);
+      this.modelStatus = t("端末内モデルを削除できませんでした。");
+    } finally {
+      this.modelBusy = false;
+      this.notify();
+    }
+  }
+
   offerUpdate(questions: readonly Question[]): void {
-    if (this.closed || !this.isReady || this.modelBusy || this.classificationBusy || this.prompt || !questions.length) return;
+    if (this.closed || this.modelBusy || this.classificationBusy || this.prompt || !questions.length) return;
     const rebuild = this.ai.needsReclassification;
     const fresh = this.ai.newQuestionKeys(questions);
     if (rebuild ? this.rebuildingOffered : !fresh.some(key => !this.offered.has(key))) return;
@@ -73,10 +108,6 @@ export class AIControls {
 
   async update(notifyCompletion = false): Promise<void> {
     if (this.closed || this.modelBusy || this.classificationBusy) return;
-    if (!this.isReady) {
-      new Notice(t("先にモデルを取得してください。"));
-      return;
-    }
     this.classificationBusy = true;
     this.classificationStatus = t("分野を分類しています…");
     this.notify();
@@ -121,7 +152,7 @@ class ClassificationPrompt extends Modal {
     this.setTitle(t("分野の分類"));
     this.modalEl.addClass("kokushi-classification-modal");
     this.contentEl.createEl("p", { text: this.rebuild
-      ? t("分野の定義が更新されました。問題を再分類しますか？")
+      ? t("分野分類の条件が変わりました。問題を再分類しますか？")
       : t("追加された問題があります。分類を実行しますか？") });
     const actions = this.contentEl.createDiv({ cls: "kokushi-history-actions" });
     const later = actions.createEl("button", { type: "button", text: t("後で") });
@@ -137,4 +168,23 @@ class ClassificationPrompt extends Modal {
     this.contentEl.empty();
     this.dismissed();
   }
+}
+
+
+class RemoveModelPrompt extends Modal {
+  constructor(app: App, private remove: () => void) { super(app); }
+
+  onOpen(): void {
+    this.setTitle(t("モデルを削除"));
+    this.modalEl.addClass("kokushi-classification-modal");
+    this.contentEl.createEl("p", { text: t("端末に保存したモデルを削除します。保存済みの分類結果やノートの関連付けは保持されます。") });
+    const actions = this.contentEl.createDiv({ cls: "kokushi-history-actions" });
+    actions.createEl("button", { type: "button", text: t("キャンセル") }).onclick = () => this.close();
+    actions.createEl("button", { type: "button", cls: "mod-warning", text: t("削除") }).onclick = () => {
+      this.close();
+      this.remove();
+    };
+  }
+
+  onClose(): void { this.contentEl.empty(); }
 }
